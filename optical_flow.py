@@ -25,13 +25,15 @@ class Hoop_finder:
 		self.pub_twist = rospy.Publisher('cmd_vel', Twist, queue_size = 1) #publishes commands to drone
 		self.bridge = CvBridge()
 
-		self.lastframe = np.zeros((360, 640), dtype = "uint8") #changing to float didn't help		
+		self.lastframe = np.zeros((360, 640), dtype = "uint8")
+		self.lastflow = np.zeros((360, 640, 2), dtype = "uint8")		
+		#self.n = 0
 
 	def takeimage(self, img): #runs image processing to find hula hoop, and feeds the resulting drone and hoop pose data into the navigation algorithm
-		
-		posedata = self.processimage1(img)
-		self.hoopnav(posedata)	
-
+		#if (self.n*.1).is_integer(): 
+		self.processimage1(img) #posedata = 
+		#self.hoopnav(posedata)	
+		#self.n+=1
 	
 	
 	def odometry(self, data): #unimplemented; the odometry is itself optical flow based
@@ -40,6 +42,8 @@ class Hoop_finder:
 		#print data.twist.twist.linear.y
 		#self.vy = data.twist.twist.linear.y
 		a = 1 #boilerplate code for spacing
+				
+		
 
 	def processimage1(self, imgdrone1):
 		#this method finds the distance and angle of the hoop and the angle of the drone relative to the hoop
@@ -49,24 +53,28 @@ class Hoop_finder:
 
 		#ret, frame1 = imgdrone1.read()
 		#self.lastframe = cv2.cvtColor(imgdrone1,cv2.COLOR_BGR2GRAY)
-		hsv = np.zeros_like(self.lastframe)
+		hsv = np.zeros((360, 640, 3), dtype = "uint8")
 		hsv[...,1] = 255
 		#while(1):
     			#ret, frame2 = imgdrone1.read()
     		currentframe = cv2.cvtColor(imgbgr,cv2.COLOR_BGR2GRAY)
 
-    		flow = cv2.calcOpticalFlowFarneback(self.lastframe, currentframe, 0.5, 3, 15, 3, 5, 1.2, 0) # 3: None,
-    		mag, ang = cv2.cartToPolar(flow[...,0], flow[...,1])
-		print len(mag[2])
-    		hsv[...,0] = ang*180/np.pi/2
-    		hsv[...,2] = cv2.normalize(mag,None,0,255,cv2.NORM_MINMAX)
+    		flow = cv2.calcOpticalFlowFarneback(self.lastframe, currentframe, 0.5, 3, 15, 3, 5, 1.2, 0) #, self.lastflow
+
+		mag, ang = cv2.cartToPolar(flow[...,0], flow[...,1])
+		#print len((ang*180/np.pi/2)[4])
+		hsv[...,0] = ang*180/np.pi/2
+		hsv[...,2] = mag#cv2.normalize(mag,None,0,255,cv2.NORM_MINMAX)
+
     		bgr = cv2.cvtColor(hsv,cv2.COLOR_HSV2BGR)
 
 		#self.pub_image.publish(bgr)
 		self.lastframe = currentframe
-
+		self.lastflow = flow
     		#cv2.imshow('frame2',bgr)
     		#k = cv2.waitKey(30) & 0xff
+
+		
     		"""	if k == 27:
     		    	break
     		elif k == ord('s'):
@@ -91,9 +99,13 @@ class Hoop_finder:
 		imgyellow = cv2.dilate(imgyellow, dilation, iterations = 5) #erodes, then dilates the image to remove noise points
 		"""
 			
-		imgdrone2 = self.bridge.cv2_to_imgmsg(imgbgr, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
+		imgdrone = self.bridge.cv2_to_imgmsg(imgbgr, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
 
-		self.pub_image.publish(imgdrone2)
+		self.pub_image.publish(imgdrone)
+
+		imgdrone2 = self.bridge.cv2_to_imgmsg(bgr, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
+
+		self.pub_image2.publish(imgdrone2)
 		
 
 if __name__=="__main__":
