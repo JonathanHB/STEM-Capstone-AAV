@@ -27,13 +27,13 @@ class Hoop_finder:
 
 		self.lastframe = np.zeros((360, 640), dtype = "uint8")
 		self.lastflow = np.zeros((360, 640, 2), dtype = "uint8")		
-		#self.n = 0
+		self.n = 0
 
 	def takeimage(self, img): #runs image processing to find hula hoop, and feeds the resulting drone and hoop pose data into the navigation algorithm
-		#if (self.n*.1).is_integer(): 
-		self.processimage1(img) #posedata = 
+		if (self.n*.5).is_integer(): 
+			self.getvectors(self.processimage1(img)) #posedata = 
 		#self.hoopnav(posedata)	
-		#self.n+=1
+		self.n+=1
 	
 	
 	def odometry(self, data): #unimplemented; the odometry is itself optical flow based
@@ -43,43 +43,58 @@ class Hoop_finder:
 		#self.vy = data.twist.twist.linear.y
 		a = 1 #boilerplate code for spacing
 				
+	def getvectors(self, vectors):
+
+		totalx = 0 #turns into average x/y
+		totaly = 0
+
+		totalrad = 0
+
+		scale = 10
+
+		for x in range(0,360/scale):
+			for y in range(0,640/scale):
+
+				totalx += vectors[scale*x][scale*y][0]
+				totaly += vectors[scale*x][scale*y][1]
+
+		totalx /= 230400/scale^2
+		totaly /= 230400/scale^2
+
+		for x in range(0,360/scale):
+			for y in range(0,640/scale):
+
+				vectors[scale*x][scale*y][0] -= totalx #turns image vectors into vectors relative to the drone's overall motion
+				vectors[scale*x][scale*y][1] -= totaly
+
+				dotprod = vectors[x][y][0]*(x-180/scale) + vectors[x][y][1]*(x-320/scale)
+				totalrad += dotprod#/np.sqrt((x-180/scale)^2+(y-320/scale)^2)
+
+		print totalx
+		print totaly
+		print totalrad
 		
 
 	def processimage1(self, imgdrone1):
-		#this method finds the distance and angle of the hoop and the angle of the drone relative to the hoop
-		#print "image recieved"
 
 		imgbgr = self.bridge.imgmsg_to_cv2(imgdrone1, "bgr8")
 
-		#ret, frame1 = imgdrone1.read()
-		#self.lastframe = cv2.cvtColor(imgdrone1,cv2.COLOR_BGR2GRAY)
 		hsv = np.zeros((360, 640, 3), dtype = "uint8")
 		hsv[...,1] = 255
-		#while(1):
-    			#ret, frame2 = imgdrone1.read()
+
     		currentframe = cv2.cvtColor(imgbgr,cv2.COLOR_BGR2GRAY)
 
-    		flow = cv2.calcOpticalFlowFarneback(self.lastframe, currentframe, 0.5, 3, 15, 3, 5, 1.2, 0, self.lastflow) # 3: None,
+    		flow = cv2.calcOpticalFlowFarneback(self.lastframe, currentframe, 0.5, 3, 15, 3, 5, 1.2, 0) #, self.lastflow
 
 		mag, ang = cv2.cartToPolar(flow[...,0], flow[...,1])
-		#print len((ang*180/np.pi/2)[4])
+
 		hsv[...,0] = ang*180/np.pi/2
-		hsv[...,2] = mag#cv2.normalize(mag,None,0,255,cv2.NORM_MINMAX)
+		hsv[...,2] = cv2.normalize(mag,None,0,255,cv2.NORM_MINMAX)
 
     		bgr = cv2.cvtColor(hsv,cv2.COLOR_HSV2BGR)
 
-		#self.pub_image.publish(bgr)
 		self.lastframe = currentframe
-		self.lastflow = flow
-    		#cv2.imshow('frame2',bgr)
-    		#k = cv2.waitKey(30) & 0xff
-
-		
-    		"""	if k == 27:
-    		    	break
-    		elif k == ord('s'):
-        		cv2.imwrite('opticalfb.png',frame2)
-        	cv2.imwrite('opticalhsv.png',bgr)"""
+		#self.lastflow = flow
 
 
 
@@ -107,6 +122,7 @@ class Hoop_finder:
 
 		self.pub_image2.publish(imgdrone2)
 		
+		return flow
 
 if __name__=="__main__":
 	rospy.init_node('Hoop_finder')
