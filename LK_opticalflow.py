@@ -26,12 +26,24 @@ class Hoop_finder:
 		self.bridge = CvBridge()
 
 		self.lastframe = np.zeros((360, 640), dtype = "uint8")
-		self.lastflow = np.zeros((360, 640, 2), dtype = "uint8")		
+		self.lastflow = np.zeros((360, 640, 2), dtype = "uint8")
+
+		self.oldgray = np.zeros((360, 640), dtype = "uint8")
+		self.mask = np.zeros((360, 640, 3), dtype = "uint8")
+
+		self.initframe = True		
 		#self.n = 0
 
 	def takeimage(self, img): #runs image processing to find hula hoop, and feeds the resulting drone and hoop pose data into the navigation algorithm
 		#if (self.n*.5).is_integer(): 
-		self.getvectors(self.processimage1(img)) #posedata = 
+
+		if self.initframe:
+
+			self.initflow(img)
+
+		else:
+
+			self.getvectors(self.processimage2(img)) #posedata = 
 		#self.hoopnav(posedata)	
 		#self.n+=1
 	
@@ -63,6 +75,39 @@ class Hoop_finder:
 		print totaly/(230400/(scale*scale))
 		print totalrad/(230400/(scale*scale))
 		
+
+	def self.initflow(self, imgdrone1):
+
+		# params for ShiTomasi corner detection, used once
+		feature_params = dict( maxCorners = 100,qualityLevel = 0.3,minDistance = 7,blockSize = 7 )
+		# Parameters for lucas kanade optical flow, used repeatedly
+		lk_params = dict( winSize  = (15,15),maxLevel = 2,criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+		# Create some random colors for each trail
+		color = np.random.randint(0,255,(100,3))
+		# Take first frame and find corners in it
+		imgbgr = self.bridge.imgmsg_to_cv2(imgdrone1, "bgr8")
+		self.old_gray = cv2.cvtColor(imgbgr, cv2.COLOR_BGR2GRAY)
+		p0 = cv2.goodFeaturesToTrack(old_gray, mask = None, **feature_params)
+		# Create a mask image for drawing purposes
+		self.mask = np.zeros_like(imgbgr)
+
+	def processimage2(self, imgdrone1):	
+
+		imgbgr = self.bridge.imgmsg_to_cv2(imgdrone1, "bgr8")
+		frame_gray = cv2.cvtColor(imgbgr, cv2.COLOR_BGR2GRAY)
+		# calculate optical flow
+		p1, st, err = cv2.calcOpticalFlowPyrLK(old_gray, frame_gray, p0, None, **lk_params)
+		# Select good points
+		good_new = p1[st==1]
+		good_old = p0[st==1]
+		# draw the tracks
+    		for i,(new,old) in enumerate(zip(good_new,good_old)):
+        		a,b = new.ravel()
+        		c,d = old.ravel()
+        		mask = cv2.line(mask, (a,b),(c,d), color[i].tolist(), 2)
+        		frame = cv2.circle(frame,(a,b),5,color[i].tolist(),-1)
+    		img = cv2.add(frame,mask)
+
 
 	def processimage1(self, imgdrone1):
 
