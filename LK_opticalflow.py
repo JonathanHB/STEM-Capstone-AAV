@@ -63,25 +63,30 @@ class Hoop_finder:
 		#self.vy = data.twist.twist.linear.y
 		a = 1 #boilerplate code for spacing
 				
-	def getvectors(self, vectors):
+	def getvector(self, points1, points2):
 
 		totalx = 0 #turns into average x/y
 		totaly = 0
 
 		totalrad = 0
 
-		scale = 10
+		pairs = 0
 
-		for x in range(0,360,scale):
-			for y in range(0,640,scale):
+		for x in range(0, len(points1)):
 
-				totalx += vectors[x][y][0]
-				totaly += vectors[x][y][1]
-				totalrad += vectors[x][y][0]*(x-180) + vectors[x][y][1]*(y-320)
+			if(
 
-		print totalx/(230400/(scale*scale))
-		print totaly/(230400/(scale*scale))
-		print totalrad/(230400/(scale*scale))
+			x = points2[x][0][1]-points1[x][0][1]
+			y = points2[x][0][0]-points1[x][0][0]
+
+			totalx+=x
+			totaly+=y
+
+			totalrad += x*(points2[x][0][1]-180) + y*(points2[x][0][0]-320) #the raw dot product is weighted in favor of points near the edges; idk if this is desirable, I should do some geometry to try to figure out what if any weighting is optimal
+
+		print totalx/len(points1)
+		print totaly/len(points1)
+		print totalrad/len(points1)
 		
 
 	def regenpoints(self, points, gray):
@@ -129,9 +134,11 @@ class Hoop_finder:
 		p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_gray, frame_gray, self.p0, None, **self.lk_params)
 		# Select good points
 
-		regen_movement, p1 = self.regenpoints(p1, frame_gray) #moves points that have drifted to the edges, returns the error that this movement will induce in flow calculations so that it can be cancelled out
+		movedpts = np.zeros(len(self.p0), dtype = uint8)
 
-		
+		movedpts, p1 = self.regenpoints(p1, frame_gray) #moves points that have drifted to the edges, returns the error that this movement will induce in flow calculations so that it can be cancelled out
+
+		self.getvector(self.p0,p1)
 
 		good_new = p1[st==1]
 		good_old = self.p0[st==1]
@@ -159,71 +166,6 @@ class Hoop_finder:
 
 		self.pub_image2.publish(imgdrone2)
 
-
-	def processimage1(self, imgdrone1):
-
-		imgbgr = self.bridge.imgmsg_to_cv2(imgdrone1, "bgr8")
-
-		hsv = np.zeros((360, 640, 3), dtype = "uint8")
-		hsv[...,1] = 255
-
-    		currentframe = cv2.cvtColor(imgbgr,cv2.COLOR_BGR2GRAY)
-
-    		flow = cv2.calcOpticalFlowFarneback(self.lastframe, currentframe, .5, 3, 15, 3, 5, 1.2, 0)#, self.lastflow)
-		
-		"""
-		
-prev		first 8-bit single-channel input image.
-next		second input image of the same size and the same type as prev.
-pyr_scale	parameter, specifying the image scale (<1) to build pyramids for each image; pyr_scale=0.5 means a classical pyramid, where each next layer is twice 			smaller than the previous one.
-levels		number of pyramid layers including the initial image; levels=1 means that no extra layers are created and only the original images are used.
-winsize		averaging window size; larger values increase the algorithm robustness to image noise and give more chances for fast motion detection, but yield more 			blurred motion field. default 15
-iterations	number of iterations the algorithm does at each pyramid level.
-poly_n		size of the pixel neighborhood used to find polynomial expansion in each pixel; larger values mean that the image will be approximated with smoother 			surfaces, yielding more robust algorithm and more blurred motion field, typically poly_n =5 or 7.
-poly_sigma	standard deviation of the Gaussian that is used to smooth derivatives used as a basis for the polynomial expansion; for poly_n=5, you can set 			poly_sigma=1.1, for poly_n=7, a good value would be poly_sigma=1.5.
-
-		"""
-
-		mag, ang = cv2.cartToPolar(flow[...,0], flow[...,1])
-
-		#hsv[...,0] = ang*180/np.pi/2
-		#hsv[...,2] = cv2.normalize(mag,None,0,255,cv2.NORM_MINMAX) #comment this out once image processing works to save computing power
-
-		hsv[...,0] = 100# + 50*(flow[...,0])
-		hsv[...,2] = 50*(flow[...,0])#cv2.normalize(flow[...,0],None,0,255,cv2.NORM_MINMAX)
-
-    		bgr = cv2.cvtColor(hsv,cv2.COLOR_HSV2BGR)
-
-		self.lastframe = currentframe
-		self.lastflow = flow
-
-
-
-		"""
-		yellow = [np.array(x, np.uint8) for x in [[25,100,100], [35, 255, 255]]] #the hsv filter used to detect yellow color by cv2.inRange
-		#ranges: 0-180,0-255,0-255
-		erosion = (5,5) #values used for erosion by cv2.erode
-		
-		imgrgb = self.bridge.imgmsg_to_cv2(imgdrone1, "bgr8") #converts drone's raw_image to bgr8 used by opencv
-		imghsv = cv2.cvtColor(imgrgb, cv2.COLOR_BGR2HSV) #converts hsv to rgb color
-
-		imgyellow = cv2.inRange(imghsv, yellow[0], yellow[1]) #filter the image for yellow, returns 8UC1 binary image
-		
-		erosion = (5,5)
-		imgyellow = cv2.erode(imgyellow, erosion, iterations = 3)
-		dilation = (5,5)
-		imgyellow = cv2.dilate(imgyellow, dilation, iterations = 5) #erodes, then dilates the image to remove noise points
-		"""
-			
-		imgdrone = self.bridge.cv2_to_imgmsg(imgbgr, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
-
-		self.pub_image.publish(imgdrone)
-
-		imgdrone2 = self.bridge.cv2_to_imgmsg(bgr, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
-
-		self.pub_image2.publish(imgdrone2)
-		
-		return flow
 
 if __name__=="__main__":
 	rospy.init_node('Hoop_finder')

@@ -63,25 +63,30 @@ class Hoop_finder:
 		#self.vy = data.twist.twist.linear.y
 		a = 1 #boilerplate code for spacing
 				
-	def getvectors(self, vectors):
+	def getvector(self, points1, points2):
 
 		totalx = 0 #turns into average x/y
 		totaly = 0
 
 		totalrad = 0
 
-		scale = 10
+		pairs = 0
 
-		for x in range(0,360,scale):
-			for y in range(0,640,scale):
+		for x in range(0, len(points1)):
 
-				totalx += vectors[x][y][0]
-				totaly += vectors[x][y][1]
-				totalrad += vectors[x][y][0]*(x-180) + vectors[x][y][1]*(y-320)
+			if(
 
-		print totalx/(230400/(scale*scale))
-		print totaly/(230400/(scale*scale))
-		print totalrad/(230400/(scale*scale))
+			x = points2[x][0][1]-points1[x][0][1]
+			y = points2[x][0][0]-points1[x][0][0]
+
+			totalx+=x
+			totaly+=y
+
+			totalrad += x*(points2[x][0][1]-180) + y*(points2[x][0][0]-320) #the raw dot product is weighted in favor of points near the edges; idk if this is desirable, I should do some geometry to try to figure out what if any weighting is optimal
+
+		print totalx/len(points1)
+		print totaly/len(points1)
+		print totalrad/len(points1)
 		
 
 	def regenpoints(self, points, gray):
@@ -129,9 +134,11 @@ class Hoop_finder:
 		p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_gray, frame_gray, self.p0, None, **self.lk_params)
 		# Select good points
 
-		regen_movement, p1 = self.regenpoints(p1, frame_gray) #moves points that have drifted to the edges, returns the error that this movement will induce in flow calculations so that it can be cancelled out
+		movedpts = np.zeros()
 
-		
+		movedpts, p1 = self.regenpoints(p1, frame_gray) #moves points that have drifted to the edges, returns the error that this movement will induce in flow calculations so that it can be cancelled out
+
+		self.getvector(self.p0,p1)
 
 		good_new = p1[st==1]
 		good_old = self.p0[st==1]
@@ -145,7 +152,7 @@ class Hoop_finder:
 
 		# Now update the previous frame and previous points
     		self.old_gray = frame_gray.copy()
-   		p0 = good_new.reshape(-1,1,2)
+   		self.p0 = good_new.reshape(-1,1,2)
 
 
 
