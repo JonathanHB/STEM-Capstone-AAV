@@ -63,7 +63,7 @@ class Hoop_finder:
 		#self.vy = data.twist.twist.linear.y
 		a = 1 #boilerplate code for spacing
 				
-	def getvector(self, points1, points2):
+	def getvector(self, points1, points2, updated):
 
 		totalx = 0 #turns into average x/y
 		totaly = 0
@@ -74,22 +74,22 @@ class Hoop_finder:
 
 		for x in range(0, len(points1)):
 
-			if(
+			if updated[x]==0:
 
-			x = points2[x][0][1]-points1[x][0][1]
-			y = points2[x][0][0]-points1[x][0][0]
+				x = points2[x][0][1]-points1[x][0][1]
+				y = points2[x][0][0]-points1[x][0][0]
 
-			totalx+=x
-			totaly+=y
+				totalx+=x
+				totaly+=y
 
-			totalrad += x*(points2[x][0][1]-180) + y*(points2[x][0][0]-320) #the raw dot product is weighted in favor of points near the edges; idk if this is desirable, I should do some geometry to try to figure out what if any weighting is optimal
+				totalrad += x*(points2[x][0][1]-180) + y*(points2[x][0][0]-320) #the raw dot product is weighted in favor of points near the edges; idk if this is desirable, I should do some geometry to try to figure out what if any weighting is optimal
 
 		print totalx/len(points1)
 		print totaly/len(points1)
 		print totalrad/len(points1)
 		
 
-	def regenpoints(self, points, gray):
+	def regenpoints(self, points, gray, updated): #regenerates points which have reached the edges of the frame, and marks these points in an array
 
 		borderwidth = 10
 		imagex = 360
@@ -97,24 +97,14 @@ class Hoop_finder:
 
 		upperx = imagex-borderwidth
 		uppery = imagey-borderwidth
-		
-		movement = [0,0]
 
 		for p in points:
 
 			if p[0][1] > upperx or p[0][1] < borderwidth or p[0][0] > uppery or p[0][0] < borderwidth:
 
-				movement[0] -= p[0][1]
-				movement[1] -= p[0][0]
-				#print p
 				p = cv2.goodFeaturesToTrack(self.old_gray, mask = None, **self.feature_params2)[0]
 
-				movement[0] += p[0][1]
-				movement[1] += p[0][0]
-				#print p
-		
-		#print movement
-		return movement,points
+		return points
 
 
 	def initflow(self, imgdrone1): #generates feature point array for LK optical flow
@@ -134,11 +124,11 @@ class Hoop_finder:
 		p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_gray, frame_gray, self.p0, None, **self.lk_params)
 		# Select good points
 
-		movedpts = np.zeros(len(self.p0), dtype = uint8)
+		movedpts = np.zeros(len(self.p0), dtype = "uint8")
 
-		movedpts, p1 = self.regenpoints(p1, frame_gray) #moves points that have drifted to the edges, returns the error that this movement will induce in flow calculations so that it can be cancelled out
+		p1 = self.regenpoints(p1, frame_gray, movedpts)
 
-		self.getvector(self.p0,p1)
+		self.getvector(self.p0, p1, movedpts)
 
 		good_new = p1[st==1]
 		good_old = self.p0[st==1]
