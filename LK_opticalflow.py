@@ -25,13 +25,13 @@ class Hoop_finder:
 		self.pub_twist = rospy.Publisher('cmd_vel', Twist, queue_size = 1) #publishes commands to drone
 		self.bridge = CvBridge()
 
-		self.lastframe = np.zeros((360, 640), dtype = "uint8")
-		self.lastflow = np.zeros((360, 640, 2), dtype = "uint8")
-
 		self.old_gray = np.zeros((360, 640), dtype = "uint8")
 		self.mask = np.zeros((360, 640, 3), dtype = "uint8")
 
 		self.p0 = []
+
+		#initializes the tracking array for regenerated points
+		self.movedpts = np.zeros(len(self.p0), dtype = "uint8")
 
 		# Create some random colors for each trail
 		self.color = np.random.randint(0,255,(100,3))
@@ -44,8 +44,8 @@ class Hoop_finder:
 		self.initframe = True		
 		self.n = 0
 
-	def takeimage(self, img): #runs image processing to find hula hoop, and feeds the resulting drone and hoop pose data into the navigation algorithm
-		if (self.initframe): 
+	def takeimage(self, img): #[front camera image from subscriber] runs image processing, and feeds the resulting pose data into the navigation algorithm
+		if (self.initframe): #initializes points once when program starts
 
 			self.initflow(img)
 			self.initframe = False
@@ -56,25 +56,25 @@ class Hoop_finder:
 		##self.n+=1
 	
 	
-	def odometry(self, data): #unused; the odometry is itself optical flow based
+	def odometry(self, data): #[odometry from subscriber] unused; the odometry is optical flow based
 		#stores odometry data to integrate with vision processing
 		#print data
 		#print data.twist.twist.linear.y
 		#self.vy = data.twist.twist.linear.y
-		a = 1 #boilerplate code for spacing
+		a = 1 #meaningless code to satisfy spacing syntax rules
 				
-	def getvector(self, points1, points2, updated):
+	def getvector(self, points1, points2, updated): #[old point positions, new point positions, indices of regenerated points] obtains the average x, y, and radial in/out motion of points
 
 		totalx = 0 #turns into average x/y
 		totaly = 0
 
-		totalrad = 0
+		totalrad = 0 #turns into average radial motion
 
 		pairs = 0
 
 		for x in range(0, len(points1)):
 
-			if updated[x]==0:
+			if updated[x] == 0: #omits regenerated points
 
 				x = points2[x][0][1]-points1[x][0][1]
 				y = points2[x][0][0]-points1[x][0][0]
@@ -82,57 +82,78 @@ class Hoop_finder:
 				totalx+=x
 				totaly+=y
 
-				totalrad += x*(points2[x][0][1]-180) + y*(points2[x][0][0]-320) #the raw dot product is weighted in favor of points near the edges; idk if this is desirable, I should do some geometry to try to figure out what if any weighting is optimal
+				totalrad += x*(points2[x][0][1]-180) + y*(points2[x][0][0]-320) #the raw dot product is weighted in favor of points near the edges; this is the most computationally efficient way to do it as far as I know, but idk if it is desirable, I should do some geometry to try to figure out what if any weighting is optimal
+
+			if updated[x] == 1:
+
+				updated[x] = 0 #resets array
 
 		print totalx/len(points1)
 		print totaly/len(points1)
-		print totalrad/len(points1)
+		print totalrad/len(points1) #these will be changed to return statements and fed into the navigation algorithm once the optical processing is in good working order
 		
 
-	def regenpoints(self, points, gray, updated): #regenerates points which have reached the edges of the frame, and marks these points in an array
+	def regenbadpoints(self, points, gray, quality, updated, flag):
 
-		borderwidth = 10
-		imagex = 360
+		for x in range(0, len(points)):
+
+			if quality[x] !=1:
+
+				points[x] = cv2.goodFeaturesToTrack(self.old_gray, mask = None, **self.feature_params2)[0] #regenerates points
+				if flag:
+					updated[x] = 1
+
+
+	def regenedgepoints(self, points, gray, updated): #[point locations, grayscale image, update tracking array] regenerates points which have reached the edges of the frame, and marks these points in an array so that their change to new locations isn't interpereted as motion
+
+		borderwidth = 10 #how close (in pixels) points have to be to the border to be regenerated
+		imagex = 360 #image size
 		imagey = 640
 
 		upperx = imagex-borderwidth
 		uppery = imagey-borderwidth
 
-		for p in points:
+		for x in range(0, len(points)):
 
-			if p[0][1] > upperx or p[0][1] < borderwidth or p[0][0] > uppery or p[0][0] < borderwidth:
+			if points[x][0][1] > upperx or points[x][0][1] < borderwidth or points[x][0][0] > uppery or points[x][0][0] < borderwidth: #checks point position
 
-				p = cv2.goodFeaturesToTrack(self.old_gray, mask = None, **self.feature_params2)[0]
+				points[x] = cv2.goodFeaturesToTrack(self.old_gray, mask = None, **self.feature_params2)[0] #regenerates points
+				updated[x] = 1
 
-		return points
+		#return points #returns new point array, "updated" array is modified as a side effect
 
 
 	def initflow(self, imgdrone1): #generates feature point array for LK optical flow
 	
-		# Take first frame and find corners in it
+		#converts from drone image to bgr8 for opencv
 		imgbgr = self.bridge.imgmsg_to_cv2(imgdrone1, "bgr8")
+		# Creates a grayscale version of the camera image
 		self.old_gray = cv2.cvtColor(imgbgr, cv2.COLOR_BGR2GRAY)
+		# Take first frame and find corners in it
 		self.p0 = cv2.goodFeaturesToTrack(self.old_gray, mask = None, **self.feature_params)
 		# Create a mask image for drawing purposes
 		self.mask = np.zeros_like(imgbgr)
 
-	def processimage2(self, imgdrone1):	
+	def processimage2(self, imgdrone1): #performs optical flow and point set maintainence tasks
 
-		imgbgr = self.bridge.imgmsg_to_cv2(imgdrone1, "bgr8")
-		frame_gray = cv2.cvtColor(imgbgr, cv2.COLOR_BGR2GRAY)
-		# calculate optical flow
+		imgbgr = self.bridge.imgmsg_to_cv2(imgdrone1, "bgr8") #converts from drone image to bgr8 for opencv
+		frame_gray = cv2.cvtColor(imgbgr, cv2.COLOR_BGR2GRAY) # Creates a grayscale version of the camera image
+		# calculate optical flow, p1 is an array of the feature points in their new positions
 		p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_gray, frame_gray, self.p0, None, **self.lk_params)
-		# Select good points
+		
+		#updates point array with regenerated points
+		self.regenedgepoints(p1, frame_gray, self.movedpts) 
 
-		movedpts = np.zeros(len(self.p0), dtype = "uint8")
+		self.getvector(self.p0, p1, self.movedpts)
 
-		p1 = self.regenpoints(p1, frame_gray, movedpts)
+		self.regenbadpoints(p1, frame_gray, st, self.movedpts, True) 
+		self.regenbadpoints(self.p0, frame_gray, st, self.movedpts, False)
 
-		self.getvector(self.p0, p1, movedpts)
+		good_new = p1#[st==1]
+		good_old = self.p0#[st==1] 
+		#this system gradually drains out all the points without replacing them, so I need to replace it with a regeneration function based on the same st flag to keep a good point supply. This will share the movedpts tracking array with regenpoints
 
-		good_new = p1[st==1]
-		good_old = self.p0[st==1]
-		# draw the tracks
+		#draws the tracks to show point motion
     		for i,(new,old) in enumerate(zip(good_new,good_old)):
         		a,b = new.ravel()
         		c,d = old.ravel()
@@ -140,7 +161,7 @@ class Hoop_finder:
         		frame = cv2.circle(imgbgr,(a,b),5,self.color[i].tolist(),-1)
     		imgout = cv2.add(imgbgr,self.mask)
 
-		# Now update the previous frame and previous points
+		#updates the previous frame and points
     		self.old_gray = frame_gray.copy()
    		self.p0 = good_new.reshape(-1,1,2)
 
