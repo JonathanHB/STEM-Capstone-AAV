@@ -31,15 +31,15 @@ class Hoop_finder:
 		self.p0 = []
 
 		#initializes the tracking array for regenerated points
-		self.movedpts = np.zeros(len(self.p0), dtype = "uint8")
+		self.movedpts = np.zeros(100,2 dtype = "uint8")
 
 		# Create some random colors for each trail
 		self.color = np.random.randint(0,255,(100,3))
 		# Parameters for lucas kanade optical flow, used repeatedly
 		self.lk_params = dict(winSize  = (15,15),maxLevel = 2,criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
 		# params for ShiTomasi corner detection, used once
-		self.feature_params = dict(maxCorners = 100,qualityLevel = 0.3,minDistance = 7,blockSize = 7)
-		self.feature_params2 = dict(maxCorners = 1,qualityLevel = 0.3,minDistance = 7,blockSize = 7)
+		self.feature_params = dict(maxCorners = 100,qualityLevel = 0.1,minDistance = 7,blockSize = 7)
+		self.feature_params2 = dict(maxCorners = 1,qualityLevel = 0.1,minDistance = 7,blockSize = 7)
 
 		self.initframe = True		
 		self.n = 0
@@ -72,38 +72,48 @@ class Hoop_finder:
 
 		pairs = 0
 
-		for x in range(0, len(points1)):
+		for i in range(0, len(points1)):
+			#print len(points1)
+			#print len(points2)
+			if updated[i][0] == 0 and updated[i][0] == 0: #omits regenerated points
 
-			if updated[x] == 0: #omits regenerated points
-
-				x = points2[x][0][1]-points1[x][0][1]
-				y = points2[x][0][0]-points1[x][0][0]
+				x = points2[i][0][1]-points1[i][0][1]
+				y = points2[i][0][0]-points1[i][0][0]
 
 				totalx+=x
 				totaly+=y
 
-				totalrad += x*(points2[x][0][1]-180) + y*(points2[x][0][0]-320) #the raw dot product is weighted in favor of points near the edges; this is the most computationally efficient way to do it as far as I know, but idk if it is desirable, I should do some geometry to try to figure out what if any weighting is optimal
-
-			if updated[x] == 1:
-
-				updated[x] = 0 #resets array
+				totalrad += x*(points2[i][0][1]-180) + y*(points2[i][0][0]-320) #the raw dot product is weighted in favor of points near the edges; this is the most computationally efficient way to do it as far as I know, but idk if it is desirable, I should do some geometry to try to figure out what if any weighting is optimal
 
 		print totalx/len(points1)
 		print totaly/len(points1)
 		print totalrad/len(points1) #these will be changed to return statements and fed into the navigation algorithm once the optical processing is in good working order
+
+		#print len(points1)
 		
 
-	def regenbadpoints(self, points, gray, quality, updated):
+	def regenbadpoints(self, points, quality, updated, flag):
+		print "p1"
 
-		for x in range(0, len(points)):
+		if flag:
 
-			if quality[x] !=1:
+			for x in range(0, len(points)): 
 
-				points[x] = cv2.goodFeaturesToTrack(self.old_gray, mask = None, **self.feature_params2)[0] #regenerates points
-				updated[x] = 1 
+				if quality[x] == 1:
+				
+					updated[x][0] = 0
+
+				else:
+
+					updated[x][0] = 1
+
+				#points[x] = cv2.goodFeaturesToTrack(gray, mask = None, **self.feature_params2) #regenerates points				
+
+		print "p2"	
+		return updated
 
 
-	def regenedgepoints(self, points, gray, updated): #[point locations, grayscale image, update tracking array] regenerates points which have reached the edges of the frame, and marks these points in an array so that their change to new locations isn't interpereted as motion
+	def regenedgepoints(self, points, updated): #[point locations, grayscale image, update tracking array] regenerates points which have reached the edges of the frame, and marks these points in an array so that their change to new locations isn't interpereted as motion
 
 		borderwidth = 10 #how close (in pixels) points have to be to the border to be regenerated
 		imagex = 360 #image size
@@ -116,11 +126,25 @@ class Hoop_finder:
 
 			if points[x][0][1] > upperx or points[x][0][1] < borderwidth or points[x][0][0] > uppery or points[x][0][0] < borderwidth: #checks point position
 
-				points[x] = cv2.goodFeaturesToTrack(self.old_gray, mask = None, **self.feature_params2)[0] #regenerates points
-				updated[x] = 1
+				updated[x][1] = 1
 
-		#return points #returns new point array, "updated" array is modified as a side effect
+			else:
 
+				updated[x][1] = 1
+
+		return updated #returns new point array, "updated" array is modified as a side effect
+
+
+	def regenall(self, points, gray, updated)
+
+		for x in range(0, len(points)):
+
+			if updated[x][0] == 1 or updated[x][1] == 1:
+
+				p = cv2.goodFeaturesToTrack(gray, mask = None, **self.feature_params2) #regenerates points
+				print p
+				print "p" 	
+				
 
 	def initflow(self, imgdrone1): #generates feature point array for LK optical flow
 	
@@ -141,12 +165,14 @@ class Hoop_finder:
 		p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_gray, frame_gray, self.p0, None, **self.lk_params)
 		
 		#updates point array with regenerated points
-		self.regenedgepoints(p1, frame_gray, self.movedpts) 
+		points, updated = self.regenedgepoints(p1, self.movedpts) 
 
 		self.getvector(self.p0, p1, self.movedpts)
 
-		self.regenbadpoints(p1, frame_gray, st, self.movedpts) 
-		self.regenbadpoints(self.p0, frame_gray, st)
+		#self.movedpts = np.zeros(100, dtype = "uint8")
+
+		updated = self.regenbadpoints(p1, st, self.movedpts, True) 
+		#updated = self.regenbadpoints(self.p0, frame_gray, st, self.movedpts, False)
 
 		good_new = p1#[st==1]
 		good_old = self.p0#[st==1] 
@@ -162,7 +188,7 @@ class Hoop_finder:
 
 		#updates the previous frame and points
     		self.old_gray = frame_gray.copy()
-   		self.p0 = good_new.reshape(-1,1,2)
+   		self.p0 = p1#good_new.reshape(-1,1,2)
 
 
 
