@@ -31,7 +31,7 @@ class Hoop_finder:
 		self.p0 = []
 
 		#initializes the tracking array for regenerated points
-		self.movedpts = np.zeros(100,2 dtype = "uint8")
+		self.movedpts = np.zeros((100,2), dtype = "uint8")
 
 		# Create some random colors for each trail
 		self.color = np.random.randint(0,255,(100,3))
@@ -63,7 +63,7 @@ class Hoop_finder:
 		#self.vy = data.twist.twist.linear.y
 		a = 1 #meaningless code to satisfy spacing syntax rules
 				
-	def getvector(self, points1, points2, updated): #[old point positions, new point positions, indices of regenerated points] obtains the average x, y, and radial in/out motion of points
+	def getvector(self, points1, points2): #[old point positions, new point positions, indices of regenerated points] obtains the average x, y, and radial in/out motion of points
 
 		totalx = 0 #turns into average x/y
 		totaly = 0
@@ -75,7 +75,7 @@ class Hoop_finder:
 		for i in range(0, len(points1)):
 			#print len(points1)
 			#print len(points2)
-			if updated[i][0] == 0 and updated[i][0] == 0: #omits regenerated points
+			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
 
 				x = points2[i][0][1]-points1[i][0][1]
 				y = points2[i][0][0]-points1[i][0][0]
@@ -92,26 +92,24 @@ class Hoop_finder:
 		#print len(points1)
 		
 
-	def regenbadpoints(self, points, quality, updated, flag):
+	def regenbadpoints(self, points, quality):
 
-		if flag:
+		for x in range(0, len(points)): 
 
-			for x in range(0, len(points)): 
-
-				if quality[x] == 1:
+			if quality[x] == 1:
 				
-					updated[x][0] = 0
+				self.movedpts[x][0] = 0
 
-				else:
+			else:
 
-					updated[x][0] = 1
+				self.movedpts[x][0] = 1
 
 				#points[x] = cv2.goodFeaturesToTrack(gray, mask = None, **self.feature_params2) #regenerates points				
 
-		return updated
+		#return self.movedpts
 
 
-	def regenedgepoints(self, points, updated): #[point locations, grayscale image, update tracking array] regenerates points which have reached the edges of the frame, and marks these points in an array so that their change to new locations isn't interpereted as motion
+	def regenedgepoints(self, points): #[point locations, grayscale image, update tracking array] regenerates points which have reached the edges of the frame, and marks these points in an array so that their change to new locations isn't interpereted as motion
 
 		borderwidth = 10 #how close (in pixels) points have to be to the border to be regenerated
 		imagex = 360 #image size
@@ -124,24 +122,39 @@ class Hoop_finder:
 
 			if points[x][0][1] > upperx or points[x][0][1] < borderwidth or points[x][0][0] > uppery or points[x][0][0] < borderwidth: #checks point position
 
-				updated[x][1] = 1
+				self.movedpts[x][1] = 1
 
 			else:
 
-				updated[x][1] = 1
+				self.movedpts[x][1] = 0
 
-		return updated #returns new point array, "updated" array is modified as a side effect
+		#return self.movedpts #returns new point array, "self.movedpts" array is modified as a side effect
 
 
-	def regenall(self, points, gray, updated)
-
+	def regenall(self, points, gray):
+		m = 0
 		for x in range(0, len(points)):
 
-			if updated[x][0] == 1 or updated[x][1] == 1:
+			if self.movedpts[x][0] == 1 or self.movedpts[x][1] == 1:
+				
+				m+=1
+				
+				
 
-				p = cv2.goodFeaturesToTrack(gray, mask = None, **self.feature_params2) #regenerates points
-				print p
-				print "p" 	
+		fp3 = dict(maxCorners = m, qualityLevel = 0.1,minDistance = 7,blockSize = 7)
+		newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #regenerates points
+		c = 0
+		print len(newpts)
+		print m	
+		for x in range(0, len(points)):
+
+			if self.movedpts[x][0] == 1 or self.movedpts[x][1] == 1:
+				
+				points[x][0] = newpts[c][0]
+				c+=1
+
+			
+		return points 	
 				
 
 	def initflow(self, imgdrone1): #generates feature point array for LK optical flow
@@ -163,14 +176,16 @@ class Hoop_finder:
 		p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_gray, frame_gray, self.p0, None, **self.lk_params)
 		
 		#updates point array with regenerated points
-		points, updated = self.regenedgepoints(p1, self.movedpts) 
+		points = self.regenedgepoints(p1) 
 
-		self.getvector(self.p0, p1, self.movedpts)
+		self.getvector(self.p0, p1)
 
 		#self.movedpts = np.zeros(100, dtype = "uint8")
 
-		updated = self.regenbadpoints(p1, st, self.movedpts, True) 
-		#updated = self.regenbadpoints(self.p0, frame_gray, st, self.movedpts, False)
+		self.regenbadpoints(p1, st) 
+		#self.movedpts = self.regenbadpoints(self.p0, frame_gray, st, self.movedpts, False)
+
+		points = self.regenall(p1, frame_gray)
 
 		good_new = p1#[st==1]
 		good_old = self.p0#[st==1] 
