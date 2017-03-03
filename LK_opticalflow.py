@@ -30,19 +30,23 @@ class Hoop_finder:
 
 		self.p0 = []
 
+		maxcorners = 200
+
 		#initializes the tracking array for regenerated points
-		self.movedpts = np.zeros((100,2), dtype = "uint8")
+		self.movedpts = np.zeros((maxcorners,2), dtype = "uint8")
 
 		# Create some random colors for each trail
-		self.color = np.random.randint(0,255,(100,3))
+		self.color = np.random.randint(0,255,(maxcorners,3))
 		# Parameters for lucas kanade optical flow, used repeatedly
 		self.lk_params = dict(winSize  = (15,15),maxLevel = 2,criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
 		# params for ShiTomasi corner detection, used once
-		self.feature_params = dict(maxCorners = 100,qualityLevel = 0.1,minDistance = 7,blockSize = 7)
+		self.feature_params = dict(maxCorners = maxcorners,qualityLevel = 0.1,minDistance = 7,blockSize = 7)
 		self.feature_params2 = dict(maxCorners = 1,qualityLevel = 0.1,minDistance = 7,blockSize = 7)
 
 		self.initframe = True		
 		self.n = 0
+
+		
 
 	def takeimage(self, img): #[front camera image from subscriber] runs image processing, and feeds the resulting pose data into the navigation algorithm
 		if (self.initframe): #initializes points once when program starts
@@ -85,9 +89,9 @@ class Hoop_finder:
 
 				totalrad += x*(points2[i][0][1]-180) + y*(points2[i][0][0]-320) #the raw dot product is weighted in favor of points near the edges; this is the most computationally efficient way to do it as far as I know, but idk if it is desirable, I should do some geometry to try to figure out what if any weighting is optimal
 
-		"""print totalx/len(points1)
+		print totalx/len(points1)
 		print totaly/len(points1)
-		print totalrad/len(points1) #these will be changed to return statements and fed into the navigation algorithm once the optical processing is in good working order"""
+		print totalrad/len(points1) #these will be changed to return statements and fed into the navigation algorithm once the optical processing is in good working order
 
 		#print len(points1)
 		
@@ -131,7 +135,8 @@ class Hoop_finder:
 		#return self.movedpts #returns new point array, "self.movedpts" array is modified as a side effect
 
 
-	def regenall(self, points, gray):
+	def regenall(self, points, gray): #regenerates points flagged as bad
+
 		m = 0
 		for x in range(0, len(points)):
 
@@ -140,18 +145,22 @@ class Hoop_finder:
 				m+=1
 				
 				
+		if m != 0:
+			fp3 = dict(maxCorners = m, qualityLevel = 0.1,minDistance = 7,blockSize = 7)
+			newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #regenerates points
+			c = 0
 
-		fp3 = dict(maxCorners = m, qualityLevel = 0.1,minDistance = 7,blockSize = 7)
-		newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #regenerates points
-		c = 0
-		print len(newpts)
-		print m	
-		for x in range(0, len(points)):
+			l = len(newpts) 
+			#print m	
 
-			if self.movedpts[x][0] == 1 or self.movedpts[x][1] == 1:
+			for x in range(0, len(points)):
+
+				if self.movedpts[x][0] == 1 or self.movedpts[x][1] == 1:
 				
-				points[x][0] = newpts[c][0]
-				c+=1
+					points[x][0] = newpts[c][0]
+					c+=1
+					if c==l:
+						break
 
 			
 		return points 	
