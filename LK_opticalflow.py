@@ -25,8 +25,14 @@ class Hoop_finder:
 		self.pub_twist = rospy.Publisher('cmd_vel', Twist, queue_size = 1) #publishes commands to drone
 		self.bridge = CvBridge()
 
-		self.old_gray = np.zeros((360, 640), dtype = "uint8")
-		self.mask = np.zeros((360, 640, 3), dtype = "uint8")
+		self.imagex = 360
+		self.imagey = 640
+
+		self.ctrx = int(self.imagex/2.0)
+		self.ctry = int(self.imagey/2.0)
+
+		self.old_gray = np.zeros((self.imagex, self.imagey), dtype = "uint8")
+		self.mask = np.zeros((self.imagex, self.imagey, 3), dtype = "uint8")
 
 		self.p0 = []
 
@@ -46,7 +52,7 @@ class Hoop_finder:
 		self.initframe = True		
 		self.n = 0
 
-		
+		self.flow = []
 
 	def takeimage(self, img): #[front camera image from subscriber] runs image processing, and feeds the resulting pose data into the navigation algorithm
 		if (self.initframe): #initializes points once when program starts
@@ -77,8 +83,7 @@ class Hoop_finder:
 		pairs = 0
 
 		for i in range(0, len(points1)):
-			#print len(points1)
-			#print len(points2)
+			
 			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
 
 				x = points2[i][0][1]-points1[i][0][1]
@@ -87,13 +92,10 @@ class Hoop_finder:
 				totalx+=x
 				totaly+=y
 
-				totalrad += x*(points2[i][0][1]-180) + y*(points2[i][0][0]-320) #the raw dot product is weighted in favor of points near the edges; this is the most computationally efficient way to do it as far as I know, but idk if it is desirable, I should do some geometry to try to figure out what if any weighting is optimal
+				totalrad += x*(points2[i][0][1]-self.ctry) + y*(points2[i][0][0]-self.ctrx) #the raw dot product is weighted in favor of points near the edges; this is the most computationally efficient way to do it as far as I know, but idk if it is desirable, I should do some geometry to try to figure out what if any weighting is optimal
 
-		print totalx/len(points1)
-		print totaly/len(points1)
-		print totalrad/len(points1) #these will be changed to return statements and fed into the navigation algorithm once the optical processing is in good working order
+		self.flow = (totalx/len(points1), totaly/len(points1), totalrad/len(points1)) #these will be changed to return statements and fed into the navigation algorithm once the optical processing is in good working order
 
-		#print len(points1)
 		
 
 	def regenbadpoints(self, points, quality):
@@ -116,11 +118,9 @@ class Hoop_finder:
 	def regenedgepoints(self, points): #[point locations, grayscale image, update tracking array] regenerates points which have reached the edges of the frame, and marks these points in an array so that their change to new locations isn't interpereted as motion
 
 		borderwidth = 10 #how close (in pixels) points have to be to the border to be regenerated
-		imagex = 360 #image size
-		imagey = 640
 
-		upperx = imagex-borderwidth
-		uppery = imagey-borderwidth
+		upperx = self.imagex-borderwidth
+		uppery = self.imagey-borderwidth
 
 		for x in range(0, len(points)):
 
@@ -212,6 +212,10 @@ class Hoop_finder:
     		self.old_gray = frame_gray.copy()
    		self.p0 = p1#good_new.reshape(-1,1,2)
 
+
+		#ctr = (self.ctry+int(9*self.flow[1]),self.ctrx+int(9*self.flow[0]))
+		ctr = 320,180
+		cv2.circle(imgbgr, ctr, abs(int(.01*self.flow[2])), (100,200,0))
 
 
 		#print p1[5][0][1] #the zero in the middle is required because the array is nominally 3 dimensional but one dimension has 0 thickness
