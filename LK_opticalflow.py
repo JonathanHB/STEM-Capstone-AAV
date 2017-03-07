@@ -36,7 +36,7 @@ class Hoop_finder:
 
 		self.p0 = []
 
-		maxcorners = 200
+		maxcorners = 400
 
 		#initializes the tracking array for regenerated points
 		self.movedpts = np.zeros((maxcorners,2), dtype = "uint8")
@@ -89,10 +89,13 @@ class Hoop_finder:
 				x = points2[i][0][1]-points1[i][0][1]
 				y = points2[i][0][0]-points1[i][0][0]
 
-				totalx+=x
+				totalx*=x
 				totaly+=y
 
-				totalrad += x*(points2[i][0][1]-self.ctry) + y*(points2[i][0][0]-self.ctrx) #the raw dot product is weighted in favor of points near the edges; this is the most computationally efficient way to do it as far as I know, but idk if it is desirable, I should do some geometry to try to figure out what if any weighting is optimal
+				px = points2[i][0][1]-self.ctry
+				py = points2[i][0][0]-self.ctrx
+
+				totalrad += (x*px + y*py)/(px*px+py*py) #the raw dot product is weighted in favor of points near the edges; this is the most computationally efficient way to do it as far as I know, but idk if it is desirable, I should do some geometry to try to figure out what if any weighting is optimal
 
 		self.flow = (totalx/len(points1), totaly/len(points1), totalrad/len(points1)) #these will be changed to return statements and fed into the navigation algorithm once the optical processing is in good working order
 
@@ -183,22 +186,17 @@ class Hoop_finder:
 		frame_gray = cv2.cvtColor(imgbgr, cv2.COLOR_BGR2GRAY) # Creates a grayscale version of the camera image
 		# calculate optical flow, p1 is an array of the feature points in their new positions
 		p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_gray, frame_gray, self.p0, None, **self.lk_params)
-		
-		#updates point array with regenerated points
-		points = self.regenedgepoints(p1) 
-
+		 
 		self.getvector(self.p0, p1)
 
-		#self.movedpts = np.zeros(100, dtype = "uint8")
+		self.regenedgepoints(p1)
 
 		self.regenbadpoints(p1, st) 
-		#self.movedpts = self.regenbadpoints(self.p0, frame_gray, st, self.movedpts, False)
 
 		points = self.regenall(p1, frame_gray)
 
 		good_new = p1#[st==1]
-		good_old = self.p0#[st==1] 
-		#this system gradually drains out all the points without replacing them, so I need to replace it with a regeneration function based on the same st flag to keep a good point supply. This will share the movedpts tracking array with regenpoints
+		good_old = self.p0#[st==1]
 
 		#draws the tracks to show point motion
     		for i,(new,old) in enumerate(zip(good_new,good_old)):
@@ -213,9 +211,16 @@ class Hoop_finder:
    		self.p0 = p1#good_new.reshape(-1,1,2)
 
 
-		#ctr = (self.ctry+int(9*self.flow[1]),self.ctrx+int(9*self.flow[0]))
-		ctr = 320,180
-		cv2.circle(imgbgr, ctr, abs(int(.01*self.flow[2])), (100,200,0))
+		ctr = (self.ctry+int(9*self.flow[1]),self.ctrx+int(9*self.flow[0]))
+		ctr = self.ctry+int(9*self.flow[1]),180
+		color = ()
+		if self.flow[2]>=0:
+			color = (100,200,0)
+		else:
+			color = (100,200,100)
+			#print "reverse"
+
+		cv2.circle(imgbgr, ctr, abs(int(1000*self.flow[2])), color, 10)
 
 
 		#print p1[5][0][1] #the zero in the middle is required because the array is nominally 3 dimensional but one dimension has 0 thickness
