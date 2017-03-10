@@ -38,6 +38,10 @@ class Hoop_finder:
 
 		maxcorners = 400
 
+		self.rollavglength = 10 #the number of values to use for the rolling average; long arrays are less sensitive and lag more, but resist noise better
+		self.rollingavgdata = [[0.0]*self.rollavglength, [0.0]*self.rollavglength, [0.0]*self.rollavglength] #stores the last [rollingavglength] flow values to compute mean
+		self.vy = 0
+
 		#initializes the tracking array for regenerated points
 		self.movedpts = np.zeros((maxcorners,2), dtype = "uint8")
 
@@ -70,9 +74,50 @@ class Hoop_finder:
 		#stores odometry data to integrate with vision processing
 		#print data
 		#print data.twist.twist.linear.y
-		#self.vy = data.twist.twist.linear.y
-		a = 1 #meaningless code to satisfy spacing syntax rules
+		self.vy = data.twist.twist.linear.y
+		#a = 1 #meaningless code to satisfy indentation syntax rules
+		
+
+	def update_roll_avg(self, newdata): #adds a new angle to the rolling average array, and removes the oldest one
+		
+		for i in range(1, self.rollavglength):
+
+			self.rollingavgdata[0][self.rollavglength-i] = self.rollingavgdata[0][self.rollavglength-i-1]
+			self.rollingavgdata[1][self.rollavglength-i] = self.rollingavgdata[1][self.rollavglength-i-1]
+			self.rollingavgdata[2][self.rollavglength-i] = self.rollingavgdata[2][self.rollavglength-i-1]
+
+		self.rollingavgdata[0][0] = newdata[0]
+		self.rollingavgdata[1][0] = newdata[1]
+		self.rollingavgdata[2][0] = newdata[2]
+		
+	def get_roll_avg(self):
+
+		sums = [0,0,0]
+
+		for i in range(1, self.rollavglength):
+
+			sums[0] += self.rollingavgdata[0][i]
+			sums[1] += self.rollingavgdata[1][i]
+			sums[2] += self.rollingavgdata[2][i]
+
+		return [sums[0]/self.rollavglength, sums[1]/self.rollavglength, sums[2]/self.rollavglength]
+	
+
+	def getangle(points):
+
+		angles = [[0.0]#TODO finish this at home
+
+		for i in range(0, len(points)):
+			
+			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
+
+				r = np.sqrt(points[i][0][0]*points[i][0][0] + points[i][0][1]*points[i][0][1])
+
+				c = 1 #camera dependent constant
+
 				
+	
+
 	def getvector(self, points1, points2): #[old point positions, new point positions, indices of regenerated points] obtains the average x, y, and radial in/out motion of points
 
 		totalx = 0 #turns into average x/y
@@ -89,15 +134,15 @@ class Hoop_finder:
 				x = points2[i][0][1]-points1[i][0][1]
 				y = points2[i][0][0]-points1[i][0][0]
 
-				totalx*=x
+				totalx+=x
 				totaly+=y
 
-				px = points2[i][0][1]-self.ctry
-				py = points2[i][0][0]-self.ctrx
+				px = points2[i][0][1]-self.ctrx
+				py = points2[i][0][0]-self.ctry
 
 				totalrad += (x*px + y*py)/(px*px+py*py) #the raw dot product is weighted in favor of points near the edges; this is the most computationally efficient way to do it as far as I know, but idk if it is desirable, I should do some geometry to try to figure out what if any weighting is optimal
 
-		self.flow = (totalx/len(points1), totaly/len(points1), totalrad/len(points1)) #these will be changed to return statements and fed into the navigation algorithm once the optical processing is in good working order
+		self.flow = [totalx/len(points1), totaly/len(points1), totalrad/len(points1)] #these will be changed to return statements and fed into the navigation algorithm once the optical processing is in good working order
 
 		
 
@@ -210,17 +255,20 @@ class Hoop_finder:
     		self.old_gray = frame_gray.copy()
    		self.p0 = p1#good_new.reshape(-1,1,2)
 
+		self.update_roll_avg(self.flow)
 
-		ctr = (self.ctry+int(9*self.flow[1]),self.ctrx+int(9*self.flow[0]))
-		ctr = self.ctry+int(9*self.flow[1]),180
+		flow = self.get_roll_avg()
+
+		ctr = (self.ctry+int(9*flow[1]),self.ctrx+int(9*flow[0]))
+		ctr = self.ctry+int(9*flow[1]),180
 		color = ()
-		if self.flow[2]>=0:
+		if flow[2]>=0:
 			color = (100,200,0)
 		else:
 			color = (100,200,100)
 			#print "reverse"
 
-		cv2.circle(imgbgr, ctr, abs(int(1000*self.flow[2])), color, 10)
+		cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
 
 
 		#print p1[5][0][1] #the zero in the middle is required because the array is nominally 3 dimensional but one dimension has 0 thickness
