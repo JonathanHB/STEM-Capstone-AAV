@@ -25,22 +25,22 @@ class Hoop_finder:
 		self.pub_twist = rospy.Publisher('cmd_vel', Twist, queue_size = 1) #publishes commands to drone
 		self.bridge = CvBridge()
 
-		self.imagex = 360
+		self.imagex = 360 #dimensions of the image, in pixels
 		self.imagey = 640
 
-		self.ctrx = int(self.imagex/2.0)
+		self.ctrx = int(self.imagex/2.0) #coordinates of image center, in pixels
 		self.ctry = int(self.imagey/2.0)
 
-		self.old_gray = np.zeros((self.imagex, self.imagey), dtype = "uint8")
-		self.mask = np.zeros((self.imagex, self.imagey, 3), dtype = "uint8")
+		self.old_gray = np.zeros((self.imagex, self.imagey), dtype = "uint8") #grayscale version of previous image used to compute flow
+		self.mask = np.zeros((self.imagex, self.imagey, 3), dtype = "uint8") #stores point trails
 
-		self.p0 = []
+		self.p0 = [] #previous point set used to compute flow
 
-		maxcorners = 400
+		maxcorners = 400 #maximum number of points used
 
 		self.rollavglength = 10 #the number of values to use for the rolling average; long arrays are less sensitive and lag more, but resist noise better
 		self.rollingavgdata = [[0.0]*self.rollavglength, [0.0]*self.rollavglength, [0.0]*self.rollavglength] #stores the last [rollingavglength] flow values to compute mean
-		self.vy = 0
+		self.v = [] #horizontal velocity from bottom camera
 
 		#initializes the tracking array for regenerated points
 		self.movedpts = np.zeros((maxcorners,2), dtype = "uint8")
@@ -49,14 +49,13 @@ class Hoop_finder:
 		self.color = np.random.randint(0,255,(maxcorners,3))
 		# Parameters for lucas kanade optical flow, used repeatedly
 		self.lk_params = dict(winSize  = (15,15),maxLevel = 2,criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
-		# params for ShiTomasi corner detection, used once
+		# params for ShiTomasi corner detection
 		self.feature_params = dict(maxCorners = maxcorners,qualityLevel = 0.1,minDistance = 7,blockSize = 7)
-		self.feature_params2 = dict(maxCorners = 1,qualityLevel = 0.1,minDistance = 7,blockSize = 7)
 
-		self.initframe = True		
-		self.n = 0
+		self.initframe = True #used to initialize point set once on the first camera frame	
 
-		self.flow = []
+		self.flow = [] #the flow data computed by getvector
+
 
 	def takeimage(self, img): #[front camera image from subscriber] runs image processing, and feeds the resulting pose data into the navigation algorithm
 		if (self.initframe): #initializes points once when program starts
@@ -65,45 +64,42 @@ class Hoop_finder:
 			self.initframe = False
 
 		self.processimage2(img)
-			
-		#self.hoopnav(posedata)	
-		##self.n+=1
 	
 	
-	def odometry(self, data): #[odometry from subscriber] unused; the odometry is optical flow based
+	def odometry(self, data): #[odometry from subscriber]  the odometry is itself optical flow based
 		#stores odometry data to integrate with vision processing
 		#print data
 		#print data.twist.twist.linear.y
-		self.vy = data.twist.twist.linear.y
-		#a = 1 #meaningless code to satisfy indentation syntax rules
+		self.v = [data.twist.twist.linear.x, data.twist.twist.linear.y]
 		
 
-	def update_roll_avg(self, newdata): #adds a new angle to the rolling average array, and removes the oldest one
+	def update_roll_avg(self, newdata): #[x, y, radial] <-- flow values	adds a new data set to the rolling average array, and removes the oldest one
 		
-		for i in range(1, self.rollavglength):
+		for i in range(1, self.rollavglength): #shifts data
 
 			self.rollingavgdata[0][self.rollavglength-i] = self.rollingavgdata[0][self.rollavglength-i-1]
 			self.rollingavgdata[1][self.rollavglength-i] = self.rollingavgdata[1][self.rollavglength-i-1]
 			self.rollingavgdata[2][self.rollavglength-i] = self.rollingavgdata[2][self.rollavglength-i-1]
 
 		self.rollingavgdata[0][0] = newdata[0]
-		self.rollingavgdata[1][0] = newdata[1]
+		self.rollingavgdata[1][0] = newdata[1] #adds new data
 		self.rollingavgdata[2][0] = newdata[2]
 		
-	def get_roll_avg(self):
+
+	def get_roll_avg(self): #returns the means of the rolling average arrays
 
 		sums = [0,0,0]
 
-		for i in range(1, self.rollavglength):
+		for i in range(1, self.rollavglength): #sums data
 
 			sums[0] += self.rollingavgdata[0][i]
 			sums[1] += self.rollingavgdata[1][i]
 			sums[2] += self.rollingavgdata[2][i]
 
-		return [sums[0]/self.rollavglength, sums[1]/self.rollavglength, sums[2]/self.rollavglength]
+		return [sums[0]/self.rollavglength, sums[1]/self.rollavglength, sums[2]/self.rollavglength] #calculates and returns averages
 	
 
-	def getangle(points):
+	def getangle(points): 
 
 		angles = [[0.0]#TODO finish this at home
 
@@ -113,9 +109,7 @@ class Hoop_finder:
 
 				r = np.sqrt(points[i][0][0]*points[i][0][0] + points[i][0][1]*points[i][0][1])
 
-				c = 1 #camera dependent constant
-
-				
+				c = 1 #camera dependent constant				
 	
 
 	def getvector(self, points1, points2): #[old point positions, new point positions, indices of regenerated points] obtains the average x, y, and radial in/out motion of points
@@ -129,7 +123,7 @@ class Hoop_finder:
 
 		for i in range(0, len(points1)):
 			
-			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
+			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points for which flow would be computed between old and new positions
 
 				x = points2[i][0][1]-points1[i][0][1]
 				y = points2[i][0][0]-points1[i][0][0]
@@ -142,11 +136,10 @@ class Hoop_finder:
 
 				totalrad += (x*px + y*py)/(px*px+py*py) #the raw dot product is weighted in favor of points near the edges; this is the most computationally efficient way to do it as far as I know, but idk if it is desirable, I should do some geometry to try to figure out what if any weighting is optimal
 
-		self.flow = [totalx/len(points1), totaly/len(points1), totalrad/len(points1)] #these will be changed to return statements and fed into the navigation algorithm once the optical processing is in good working order
+		self.flow = [totalx/len(points1), totaly/len(points1), totalrad/len(points1)] #returns average flow values
 
 		
-
-	def regenbadpoints(self, points, quality):
+	def regenbadpoints(self, points, quality): #[point locations, list of points with and without flow] flags and deflags points for which flow cannot be found
 
 		for x in range(0, len(points)): 
 
@@ -158,12 +151,8 @@ class Hoop_finder:
 
 				self.movedpts[x][0] = 1
 
-				#points[x] = cv2.goodFeaturesToTrack(gray, mask = None, **self.feature_params2) #regenerates points				
 
-		#return self.movedpts
-
-
-	def regenedgepoints(self, points): #[point locations, grayscale image, update tracking array] regenerates points which have reached the edges of the frame, and marks these points in an array so that their change to new locations isn't interpereted as motion
+	def regenedgepoints(self, points): #[point locations] flags and deflags points which are too close to the edge
 
 		borderwidth = 10 #how close (in pixels) points have to be to the border to be regenerated
 
@@ -180,38 +169,38 @@ class Hoop_finder:
 
 				self.movedpts[x][1] = 0
 
-		#return self.movedpts #returns new point array, "self.movedpts" array is modified as a side effect
 
-
-	def regenall(self, points, gray): #regenerates points flagged as bad
+	def regenall(self, points, gray): #[points, grayscale image used as regeneration argument] regenerates flagged points
 
 		m = 0
-		for x in range(0, len(points)):
+
+		for x in range(0, len(points)): #counts how many points need regeneration
 
 			if self.movedpts[x][0] == 1 or self.movedpts[x][1] == 1:
 				
 				m+=1
-				
-				
+								
 		if m != 0:
+
 			fp3 = dict(maxCorners = m, qualityLevel = 0.1,minDistance = 7,blockSize = 7)
-			newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #regenerates points
+
+			newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #generates a batch of as many points need regeneration
+
 			c = 0
 
-			l = len(newpts) 
-			#print m	
+			l = len(newpts) 	
 
 			for x in range(0, len(points)):
 
 				if self.movedpts[x][0] == 1 or self.movedpts[x][1] == 1:
 				
-					points[x][0] = newpts[c][0]
+					points[x][0] = newpts[c][0] #replaces points flagged for regeneration
 					c+=1
 					if c==l:
-						break
+						break #terminates once all new points have been used
 
 			
-		return points 	
+		return points #returns updated point array
 				
 
 	def initflow(self, imgdrone1): #generates feature point array for LK optical flow
@@ -229,7 +218,8 @@ class Hoop_finder:
 
 		imgbgr = self.bridge.imgmsg_to_cv2(imgdrone1, "bgr8") #converts from drone image to bgr8 for opencv
 		frame_gray = cv2.cvtColor(imgbgr, cv2.COLOR_BGR2GRAY) # Creates a grayscale version of the camera image
-		# calculate optical flow, p1 is an array of the feature points in their new positions
+
+		# calculates optical flow, p1 is an array of the feature points in their new positions
 		p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_gray, frame_gray, self.p0, None, **self.lk_params)
 		 
 		self.getvector(self.p0, p1)
@@ -251,12 +241,13 @@ class Hoop_finder:
         		frame = cv2.circle(imgbgr,(a,b),5,self.color[i].tolist(),-1)
     		imgout = cv2.add(imgbgr,self.mask)
 
-		#updates the previous frame and points
+		#updates the previous frame, points, and rolling average
     		self.old_gray = frame_gray.copy()
-   		self.p0 = p1#good_new.reshape(-1,1,2)
-
+   		self.p0 = p1
 		self.update_roll_avg(self.flow)
 
+
+		#draws a circle onto the camera image based on flow vector for visual debugging
 		flow = self.get_roll_avg()
 
 		ctr = (self.ctry+int(9*flow[1]),self.ctrx+int(9*flow[0]))
@@ -267,6 +258,7 @@ class Hoop_finder:
 		else:
 			color = (100,200,100)
 			#print "reverse"
+
 
 		cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
 
@@ -283,8 +275,11 @@ class Hoop_finder:
 
 
 if __name__=="__main__":
+
 	rospy.init_node('Hoop_finder')
         
 	node = Hoop_finder()
 
 	rospy.spin()
+
+
