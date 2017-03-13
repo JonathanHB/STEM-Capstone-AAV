@@ -101,7 +101,7 @@ class Hoop_finder:
 		return [sums[0]/self.rollavglength, sums[1]/self.rollavglength, sums[2]/self.rollavglength] #calculates and returns averages
 	
 
-	def getangle(self, points): #[points] returns an array with the x and y angles of all the points
+	def getangles(self, points): #[points] returns an array with the x and y angles of all the points
 
 		c = 1 #camera dependent constant
 
@@ -267,6 +267,11 @@ class Hoop_finder:
 		p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_gray, frame_gray, self.p0, None, **self.lk_params)
 		 
 		self.getvector(self.p0, p1)
+		angles1 = self.getangles(self.p0)
+		angles2 = self.getangles(p1)
+		deltas = self.getdeltas(angles1, angles2)
+		ratio = self.wallratio(p1, angles2, deltas)
+		print ratio
 
 		self.regenedgepoints(p1)
 
@@ -283,7 +288,7 @@ class Hoop_finder:
         		c,d = old.ravel()
         		mask = cv2.line(self.mask, (a,b),(c,d), self.color[i].tolist(), 2)
         		frame = cv2.circle(imgbgr,(a,b),5,self.color[i].tolist(),-1)
-    		imgout = cv2.add(imgbgr,self.mask)
+    		imgout = cv2.add(imgbgr, self.mask)
 
 		#updates the previous frame, points, and rolling average
     		self.old_gray = frame_gray.copy()
@@ -295,7 +300,7 @@ class Hoop_finder:
 		flow = self.get_roll_avg()
 
 		ctr = (self.ctry+int(9*flow[1]),self.ctrx+int(9*flow[0]))
-		ctr = self.ctry+int(9*flow[1]),180
+		#ctr = self.ctry+int(9*flow[1]),180
 		color = ()
 		if flow[2]>=0:
 			color = (100,200,0)
@@ -305,6 +310,7 @@ class Hoop_finder:
 
 
 		cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
+		cv2.circle(imgbgr, (self.ctry, self.ctrx*ratio), 30, (100,200,50), 10)
 
 
 		#print p1[5][0][1] #the zero in the middle is required because the array is nominally 3 dimensional but one dimension has 0 thickness
