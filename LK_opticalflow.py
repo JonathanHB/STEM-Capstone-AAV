@@ -25,14 +25,14 @@ class Hoop_finder:
 		self.pub_twist = rospy.Publisher('cmd_vel', Twist, queue_size = 1) #publishes commands to drone
 		self.bridge = CvBridge()
 
-		self.imagex = 360 #dimensions of the image, in pixels
-		self.imagey = 640
+		self.imagex = 640
+		self.imagey = 360 #dimensions of the image, in pixels
 
-		self.ctrx = int(self.imagex/2.0) #coordinates of image center, in pixels
-		self.ctry = int(self.imagey/2.0)
+		self.ctrx = int(self.imagex/2.0)
+		self.ctry = int(self.imagey/2.0) #coordinates of image center, in pixels
 
-		self.old_gray = np.zeros((self.imagex, self.imagey), dtype = "uint8") #grayscale version of previous image used to compute flow
-		self.mask = np.zeros((self.imagex, self.imagey, 3), dtype = "uint8") #stores point trails
+		self.old_gray = np.zeros((self.imagey, self.imagex), dtype = "uint8") #grayscale version of previous image used to compute flow
+		self.mask = np.zeros((self.imagey, self.imagex, 3), dtype = "uint8") #stores point trails
 
 		self.p0 = [] #previous point set used to compute flow
 
@@ -41,7 +41,7 @@ class Hoop_finder:
 		maxcorners = 400 #maximum number of points used
 
 		self.rollavglength = 10 #the number of values to use for the rolling average; long arrays are less sensitive and lag more, but resist noise better
-		self.rollingavgdata = [[0.0]*self.rollavglength, [0.0]*self.rollavglength, [0.0]*self.rollavglength] #stores the last [rollingavglength] flow values to compute mean
+		self.rollingavgdata = [[0.0]*self.rollavglength, [0.0]*self.rollavglength, [0.0]*self.rollavglength, [0.0]*self.rollavglength] #stores the last [rollingavglength] flow values to compute mean
 		self.v = [] #horizontal velocity from bottom camera
 
 		#initializes the tracking array for regenerated points
@@ -82,28 +82,30 @@ class Hoop_finder:
 			self.rollingavgdata[0][self.rollavglength-i] = self.rollingavgdata[0][self.rollavglength-i-1]
 			self.rollingavgdata[1][self.rollavglength-i] = self.rollingavgdata[1][self.rollavglength-i-1]
 			self.rollingavgdata[2][self.rollavglength-i] = self.rollingavgdata[2][self.rollavglength-i-1]
+			self.rollingavgdata[3][self.rollavglength-i] = self.rollingavgdata[3][self.rollavglength-i-1]
 
 		self.rollingavgdata[0][0] = newdata[0]
 		self.rollingavgdata[1][0] = newdata[1] #adds new data
 		self.rollingavgdata[2][0] = newdata[2]
-		
+		self.rollingavgdata[3][0] = newdata[3]		
 
 	def get_roll_avg(self): #returns the means of the rolling average arrays
 
-		sums = [0,0,0]
+		sums = [0,0,0,0]
 
 		for i in range(1, self.rollavglength): #sums data
 
 			sums[0] += self.rollingavgdata[0][i]
 			sums[1] += self.rollingavgdata[1][i]
 			sums[2] += self.rollingavgdata[2][i]
+			sums[3] += self.rollingavgdata[3][i]
 
-		return [sums[0]/self.rollavglength, sums[1]/self.rollavglength, sums[2]/self.rollavglength] #calculates and returns averages
+		return [sums[0]/self.rollavglength, sums[1]/self.rollavglength, sums[2]/self.rollavglength, sums[3]/self.rollavglength] #calculates and returns averages
 	
 
 	def getangles(self, points): #[points] returns an array with the x and y angles of all the points
 
-		c = 1 #camera dependent constant
+		z = 1 #camera dependent constant
 
 		angles = [[0.0]*len(points), [0.0]*len(points)]
 
@@ -113,8 +115,8 @@ class Hoop_finder:
 
 				#r = np.sqrt(points[i][0][0]*points[i][0][0] + points[i][0][1]*points[i][0][1])
 
-				angles[0][i] = np.atan((points[i][0][1]-self.ctrx)/z)
-				angles[1][i] = np.atan((points[i][0][0]-self.ctry)/z)
+				angles[1][i] = np.arctan((points[i][0][1]-self.ctry)/z)
+				angles[0][i] = np.arctan((points[i][0][0]-self.ctrx)/z)
 		
 		return angles				
 	
@@ -145,9 +147,9 @@ class Hoop_finder:
 			
 			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
 
-				val = np.csc(angles[i][0])*np.csc(angles[i][0])/deltas[i][0]
+				val = 1/(np.sin(angles[0][i])*np.sin(angles[0][i])*deltas[0][i])
 
-				if points[i][0][1] > self.ctrx:
+				if points[i][0][0] > self.ctrx:
 					rnum+=1
 					rightsum+=val
 				else:
@@ -169,14 +171,14 @@ class Hoop_finder:
 			
 			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points for which flow would be computed between old and new positions
 
-				x = points2[i][0][1]-points1[i][0][1]
-				y = points2[i][0][0]-points1[i][0][0]
+				x = points2[i][0][0]-points1[i][0][0]
+				y = points2[i][0][1]-points1[i][0][1]
 
 				totalx+=x
 				totaly+=y
 
-				px = points2[i][0][1]-self.ctrx
-				py = points2[i][0][0]-self.ctry
+				px = points2[i][0][0]-self.ctrx
+				py = points2[i][0][1]-self.ctry
 
 				totalrad += (x*px + y*py)/(px*px+py*py) #the raw dot product is weighted in favor of points near the edges; this is the most computationally efficient way to do it as far as I know, but idk if it is desirable, I should do some geometry to try to figure out what if any weighting is optimal
 
@@ -200,12 +202,12 @@ class Hoop_finder:
 
 		borderwidth = 10 #how close (in pixels) points have to be to the border to be regenerated
 
-		upperx = self.imagex-borderwidth
 		uppery = self.imagey-borderwidth
+		upperx = self.imagex-borderwidth
 
 		for x in range(0, len(points)):
 
-			if points[x][0][1] > upperx or points[x][0][1] < borderwidth or points[x][0][0] > uppery or points[x][0][0] < borderwidth: #checks point position
+			if points[x][0][1] > uppery or points[x][0][1] < borderwidth or points[x][0][0] > upperx or points[x][0][0] < borderwidth: #checks point position
 
 				self.movedpts[x][1] = 1
 
@@ -293,14 +295,14 @@ class Hoop_finder:
 		#updates the previous frame, points, and rolling average
     		self.old_gray = frame_gray.copy()
    		self.p0 = p1
-		self.update_roll_avg(self.flow)
+		self.update_roll_avg([self.flow[0], self.flow[1], self.flow[2], ratio])
 
 
 		#draws a circle onto the camera image based on flow vector for visual debugging
 		flow = self.get_roll_avg()
 
-		ctr = (self.ctry+int(9*flow[1]),self.ctrx+int(9*flow[0]))
-		#ctr = self.ctry+int(9*flow[1]),180
+		ctr = (self.ctrx+int(9*flow[0]), self.ctry+int(9*flow[1]))
+		#ctr = 400,180
 		color = ()
 		if flow[2]>=0:
 			color = (100,200,0)
@@ -310,7 +312,7 @@ class Hoop_finder:
 
 
 		cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
-		cv2.circle(imgbgr, (self.ctry, self.ctrx*ratio), 30, (100,200,50), 10)
+		cv2.circle(imgbgr, (int(self.ctrx*flow[3]), self.ctry), 30, (100,100,50), 10)
 
 
 		#print p1[5][0][1] #the zero in the middle is required because the array is nominally 3 dimensional but one dimension has 0 thickness
