@@ -38,7 +38,7 @@ class Hoop_finder:
 
 		self.lastangles = [] #used to compute d-theta
 
-		maxcorners = 400 #maximum number of points used
+		maxcorners = 100 #maximum number of points used
 
 		self.rollavglength = 10 #the number of values to use for the rolling average; long arrays are less sensitive and lag more, but resist noise better
 		self.rollingavgdata = [[0.0]*self.rollavglength, [0.0]*self.rollavglength, [0.0]*self.rollavglength, [0.0]*self.rollavglength] #stores the last [rollingavglength] flow values to compute mean
@@ -105,7 +105,9 @@ class Hoop_finder:
 
 	def getangles(self, points): #[points] returns an array with the x and y angles of all the points
 
-		z = 1 #camera dependent constant
+		z = 409.581 #camera dependent constant, with dimensions of pixels
+
+		#range = +- 38deg, the current camera model looks decent, z is computed as (pixel distance from image center)*cot(angle of that point obtained from protractor)
 
 		angles = [[0.0]*len(points), [0.0]*len(points)]
 
@@ -117,6 +119,7 @@ class Hoop_finder:
 
 				angles[1][i] = np.arctan((points[i][0][1]-self.ctry)/z)
 				angles[0][i] = np.arctan((points[i][0][0]-self.ctrx)/z)
+				#print angles[0][i]*57
 		
 		return angles				
 	
@@ -147,16 +150,30 @@ class Hoop_finder:
 			
 			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
 
-				val = 1/(np.sin(angles[0][i])*np.sin(angles[0][i])*deltas[0][i])
+				if abs(angles[0][i]) > .11 and deltas[0][i] != 0:
+				
+					val = 1/(np.sin(angles[0][i])*abs(np.sin(angles[0][i]))*deltas[0][i])
+					print np.sign(val)
+					print np.sign(deltas[0][i])
+					print "d"
+				else:
 
-				if points[i][0][0] > self.ctrx:
+					val = 0
+
+				if angles[0][i] > 0:
 					rnum+=1
 					rightsum+=val
 				else:
 					lnum+=1
 					leftsum+=val
  
-		return (rightsum/rnum)/(leftsum/lnum) #returns distance ratio
+		if rnum != 0 and lnum != 0 and leftsum != 0:
+
+			return (rightsum/rnum)/(leftsum/lnum) #returns distance ratio
+
+		print "bad data"
+		return 0 #I should use -1 and have a proper response to it, since 0 is a possible ratio without either count being 0
+
 
 	def getvector(self, points1, points2): #[old point positions, new point positions, indices of regenerated points] obtains the average x, y, and radial in/out motion of points
 
@@ -269,15 +286,16 @@ class Hoop_finder:
 		p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_gray, frame_gray, self.p0, None, **self.lk_params)
 		 
 		self.getvector(self.p0, p1)
+		
 		angles1 = self.getangles(self.p0)
 		angles2 = self.getangles(p1)
 		deltas = self.getdeltas(angles1, angles2)
-		ratio = self.wallratio(p1, angles2, deltas)
+		ratio = self.wallratio(p1, angles2, deltas) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
 		print ratio
-
+		
 		self.regenedgepoints(p1)
 
-		self.regenbadpoints(p1, st) 
+		self.regenbadpoints(p1, st) #this plus the block of 4 methods above contribute 1.5s of lag
 
 		points = self.regenall(p1, frame_gray)
 
