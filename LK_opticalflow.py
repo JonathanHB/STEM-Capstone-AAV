@@ -35,6 +35,8 @@ class Hoop_finder:
 		self.mask = np.zeros((self.imagey, self.imagex, 3), dtype = "uint8") #stores point trails
 
 		self.p0 = [] #previous point set used to compute flow
+		self.old_xdeltas1 = []
+		self.old_xdeltas2 = []
 
 		self.lastangles = [] #used to compute d-theta
 
@@ -89,6 +91,7 @@ class Hoop_finder:
 		self.rollingavgdata[2][0] = newdata[2]
 		self.rollingavgdata[3][0] = newdata[3]		
 
+
 	def get_roll_avg(self): #returns the means of the rolling average arrays
 
 		sums = [0,0,0,0]
@@ -119,8 +122,7 @@ class Hoop_finder:
 
 				angles[1][i] = np.arctan((points[i][0][1]-self.ctry)/z)
 				angles[0][i] = np.arctan((points[i][0][0]-self.ctrx)/z)
-				#print angles[0][i]*57
-		
+				#print angles[0][i]*57 #this produces a very reasonable set of angles, so it probably works properly		
 		return angles				
 	
 
@@ -134,11 +136,12 @@ class Hoop_finder:
 
 				d_angles[0][i] = angles2[0][i] - angles1[0][i]
 				d_angles[1][i] = angles2[1][i] - angles1[1][i]
+				#print d_angles[0][i] #yields sane results
 
 		return d_angles
 
 
-	def wallratio(self, points, angles, deltas): #computes the ratio of distances to the two walls, assuming the drone is parallel to them
+	def wallratio(self, points, angles, deltas): #computes the ratio of distances to the two walls, assuming the drone is parallel to them and not moving laterally or turning
 
 		rightsum = 0
 		leftsum = 0
@@ -146,16 +149,22 @@ class Hoop_finder:
 		rnum = 0
 		lnum = 0
 
+		c1 = 0.0
+		c2 = 0.0
+
 		for i in range(0, len(points)):
 			
 			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
 
-				if abs(angles[0][i]) > .11 and deltas[0][i] != 0:
+				if abs(angles[0][i]) > .15 and deltas[0][i] != 0:
 				
 					val = 1/(np.sin(angles[0][i])*abs(np.sin(angles[0][i]))*deltas[0][i])
-					print np.sign(val)
-					print np.sign(deltas[0][i])
-					print "d"
+					#print np.sign(val)
+					#print np.sign(deltas[0][i])
+					c1+=1
+					if val > 0:
+						c2+=1
+					#print "d"
 				else:
 
 					val = 0
@@ -167,6 +176,10 @@ class Hoop_finder:
 					lnum+=1
 					leftsum+=val
  
+		#print rightsum
+		#print leftsum
+
+		#print c2/c1
 		if rnum != 0 and lnum != 0 and leftsum != 0:
 
 			return (rightsum/rnum)/(leftsum/lnum) #returns distance ratio
@@ -265,6 +278,8 @@ class Hoop_finder:
 			
 		return points #returns updated point array
 				
+		
+
 
 	def initflow(self, imgdrone1): #generates feature point array for LK optical flow
 	
@@ -291,7 +306,7 @@ class Hoop_finder:
 		angles2 = self.getangles(p1)
 		deltas = self.getdeltas(angles1, angles2)
 		ratio = self.wallratio(p1, angles2, deltas) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
-		print ratio
+		#print np.arctan(ratio)
 		
 		self.regenedgepoints(p1)
 
@@ -314,6 +329,8 @@ class Hoop_finder:
     		self.old_gray = frame_gray.copy()
    		self.p0 = p1
 		self.update_roll_avg([self.flow[0], self.flow[1], self.flow[2], ratio])
+		self.old_xdeltas2 = self.old_xdeltas1
+		
 
 
 		#draws a circle onto the camera image based on flow vector for visual debugging
