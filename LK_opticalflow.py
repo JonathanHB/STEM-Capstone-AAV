@@ -40,10 +40,10 @@ class Hoop_finder:
 
 		self.lastangles = [] #used to compute d-theta
 
-		maxcorners = 100 #maximum number of points used
+		maxcorners = 200 #maximum number of points used
 
 		self.rollavglength = 10 #the number of values to use for the rolling average; long arrays are less sensitive and lag more, but resist noise better
-		self.rollingavgdata = [[0.0]*self.rollavglength, [0.0]*self.rollavglength, [0.0]*self.rollavglength, [0.0]*self.rollavglength] #stores the last [rollingavglength] flow values to compute mean
+		self.rollingavgdata = np.zeros((4,100), dtype = "float32") #stores the last [rollingavglength] flow values to compute mean
 		self.v = [] #horizontal velocity from bottom camera
 
 		#initializes the tracking array for regenerated points
@@ -142,7 +142,7 @@ class Hoop_finder:
 		return d_angles
 
 
-	def wallratio(self, points, angles, deltas, deltas1, deltas2): #computes the ratio of distances to the two walls, assuming the drone is parallel to them and not moving laterally or turning
+	def wallratio(self, points, angles, deltas): #computes the ratio of distances to the two walls, assuming the drone is parallel to them and not moving laterally or turning
 
 		rightsum = 0
 		leftsum = 0
@@ -157,13 +157,14 @@ class Hoop_finder:
 			
 			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
 
-				smoothdelta = (deltas[0][i] + deltas1[0][i] + deltas2[0][i])/3
+				#smoothdelta = (deltas[0][i] + deltas1[0][i] + deltas2[0][i])/3 #this system failed
 
-				if abs(angles[0][i]) > .15 and smoothdelta != 0:#deltas[0][i] != 0:
+				if abs(angles[0][i]) > .15 and deltas[0][i] != 0:
 				
-					val = 1/(np.sin(angles[0][i])*abs(np.sin(angles[0][i]))*smoothdelta)
+					val = (np.sin(angles[0][i])*abs(np.sin(angles[0][i]))*deltas[0][i])
+					#val = abs(deltas[0][i])
 					#print np.sign(val)
-					#print np.sign(deltas[0][i])
+					print deltas[0][i]
 					c1+=1
 					if val > 0:
 						c2+=1
@@ -174,10 +175,12 @@ class Hoop_finder:
 
 				if angles[0][i] > 0:
 					rnum+=1
-					rightsum+=val
+					if val >= 0:
+						rightsum+=val
 				else:
 					lnum+=1
-					leftsum+=val
+					if val >= 0:
+						leftsum+=val
  
 		#print rightsum
 		#print leftsum
@@ -185,7 +188,7 @@ class Hoop_finder:
 		#print c2/c1
 		if rnum != 0 and lnum != 0 and leftsum != 0:
 
-			return (rightsum/rnum)/(leftsum/lnum) #returns distance ratio
+			return (rnum*rnum/rightsum)/(lnum*lnum/leftsum) #returns distance ratio
 
 		print "bad data"
 		return 0 #I should use -1 and have a proper response to it, since 0 is a possible ratio without either count being 0
@@ -308,7 +311,8 @@ class Hoop_finder:
 		angles1 = self.getangles(self.p0)
 		angles2 = self.getangles(p1)
 		deltas = self.getdeltas(angles1, angles2)
-		ratio = self.wallratio(p1, angles2, deltas, self.old_xdeltas1, self.old_xdeltas2) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
+		ratio = self.wallratio(p1, angles2, deltas) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
+		print ratio		
 		#print np.arctan(ratio)
 
 		
@@ -332,11 +336,9 @@ class Hoop_finder:
 		#updates the previous frame, points, and rolling average
     		self.old_gray = frame_gray.copy()
    		self.p0 = p1
-		self.update_roll_avg([self.flow[0], self.flow[1], self.flow[2], ratio])
-		self.old_xdeltas2 = self.old_xdeltas1
-		self.old_xdeltas1 = deltas
+		self.update_roll_avg([self.flow[0], self.flow[1], self.flow[2], np.arctan(ratio)])
 		
-		print self.v
+		#print self.v
 
 		#draws a circle onto the camera image based on flow vector for visual debugging
 		flow = self.get_roll_avg()
@@ -352,7 +354,7 @@ class Hoop_finder:
 
 
 		cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
-		cv2.circle(imgbgr, (-int(self.ctrx*np.arctan(flow[3])), self.ctry), 30, (100,100,50), 10)
+		cv2.circle(imgbgr, (int(self.ctrx*flow[3]*4/3.14159265358979), self.ctry), 30, (100,100,50), 10)
 
 
 		#print p1[5][0][1] #the zero in the middle is required because the array is nominally 3 dimensional but one dimension has 0 thickness
