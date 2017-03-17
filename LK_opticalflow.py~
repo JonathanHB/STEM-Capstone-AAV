@@ -35,8 +35,8 @@ class Hoop_finder:
 		self.mask = np.zeros((self.imagey, self.imagex, 3), dtype = "uint8") #stores point trails
 
 		self.p0 = [] #previous point set used to compute flow
-		self.old_xdeltas1 = []
-		self.old_xdeltas2 = []
+		self.old_xdeltas1 = np.zeros((2,100), dtype = "float32")
+		self.old_xdeltas2 = np.zeros((2,100), dtype = "float32")
 
 		self.lastangles = [] #used to compute d-theta
 
@@ -57,6 +57,7 @@ class Hoop_finder:
 		self.feature_params = dict(maxCorners = maxcorners,qualityLevel = 0.1,minDistance = 7,blockSize = 7)
 
 		self.initframe = True #used to initialize point set once on the first camera frame	
+		self.delta_init = True
 
 		self.flow = [] #the flow data computed by getvector
 
@@ -141,7 +142,7 @@ class Hoop_finder:
 		return d_angles
 
 
-	def wallratio(self, points, angles, deltas): #computes the ratio of distances to the two walls, assuming the drone is parallel to them and not moving laterally or turning
+	def wallratio(self, points, angles, deltas, deltas1, deltas2): #computes the ratio of distances to the two walls, assuming the drone is parallel to them and not moving laterally or turning
 
 		rightsum = 0
 		leftsum = 0
@@ -156,9 +157,11 @@ class Hoop_finder:
 			
 			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
 
-				if abs(angles[0][i]) > .15 and deltas[0][i] != 0:
+				smoothdelta = (deltas[0][i] + deltas1[0][i] + deltas2[0][i])/3
+
+				if abs(angles[0][i]) > .15 and smoothdelta != 0:#deltas[0][i] != 0:
 				
-					val = 1/(np.sin(angles[0][i])*abs(np.sin(angles[0][i]))*deltas[0][i])
+					val = 1/(np.sin(angles[0][i])*abs(np.sin(angles[0][i]))*smoothdelta)
 					#print np.sign(val)
 					#print np.sign(deltas[0][i])
 					c1+=1
@@ -305,8 +308,9 @@ class Hoop_finder:
 		angles1 = self.getangles(self.p0)
 		angles2 = self.getangles(p1)
 		deltas = self.getdeltas(angles1, angles2)
-		ratio = self.wallratio(p1, angles2, deltas) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
+		ratio = self.wallratio(p1, angles2, deltas, self.old_xdeltas1, self.old_xdeltas2) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
 		#print np.arctan(ratio)
+
 		
 		self.regenedgepoints(p1)
 
@@ -330,24 +334,25 @@ class Hoop_finder:
    		self.p0 = p1
 		self.update_roll_avg([self.flow[0], self.flow[1], self.flow[2], ratio])
 		self.old_xdeltas2 = self.old_xdeltas1
-		self.old_xdeltas1 = 
+		self.old_xdeltas1 = deltas
+		
 
 
 		#draws a circle onto the camera image based on flow vector for visual debugging
 		flow = self.get_roll_avg()
-
+		print flow[3]
 		ctr = (self.ctrx+int(9*flow[0]), self.ctry+int(9*flow[1]))
 		#ctr = 400,180
 		color = ()
 		if flow[2]>=0:
-			color = (100,200,0)
+			color = (100,20,100)
 		else:
 			color = (100,200,100)
 			#print "reverse"
 
 
 		cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
-		cv2.circle(imgbgr, (int(self.ctrx*flow[3]), self.ctry), 30, (100,100,50), 10)
+		cv2.circle(imgbgr, (-int(self.ctrx*np.arctan(flow[3])), self.ctry), 30, (100,100,50), 10)
 
 
 		#print p1[5][0][1] #the zero in the middle is required because the array is nominally 3 dimensional but one dimension has 0 thickness
