@@ -186,7 +186,7 @@ class Hoop_finder:
 		#print leftsum
 
 		#print c2/c1
-		if rnum != 0 and lnum != 0 and leftsum != 0:
+		if rightsum != 0 and lnum != 0 and leftsum != 0:
 
 			return (rnum*rnum/rightsum)/(lnum*lnum/leftsum) #returns distance ratio
 
