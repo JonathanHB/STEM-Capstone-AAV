@@ -35,8 +35,8 @@ class Hoop_finder:
 		self.mask = np.zeros((self.imagey, self.imagex, 3), dtype = "uint8") #stores point trails
 
 		self.p0 = [] #previous point set used to compute flow
-		self.old_xdeltas1 = np.zeros((2,maxcorners), dtype = "float32")
-		self.old_xdeltas2 = np.zeros((2,maxcorners), dtype = "float32")
+		#self.old_xdeltas1 = np.zeros((2,maxcorners), dtype = "float32")
+		#self.old_xdeltas2 = np.zeros((2,maxcorners), dtype = "float32")
 
 		self.lastangles = [] #used to compute d-theta
 
@@ -161,10 +161,10 @@ class Hoop_finder:
 
 				if abs(angles[0][i]) > .15 and deltas[0][i] != 0:
 				
-					val = (np.sin(angles[0][i])*abs(np.sin(angles[0][i]))*deltas[0][i])
+					val = np.sin(angles[0][i])*abs(np.sin(angles[0][i]))/deltas[0][i]
 					#val = abs(deltas[0][i])
 					#print np.sign(val)
-					print deltas[0][i]
+					#print deltas[0][i]
 					c1+=1
 					if val > 0:
 						c2+=1
@@ -186,15 +186,15 @@ class Hoop_finder:
 		#print leftsum
 
 		#print c2/c1
-		if rightsum != 0 and lnum != 0 and leftsum != 0:
+		if leftsum != 0 and lnum != 0 and lnum != 0:
 
-			return (rnum*rnum/rightsum)/(lnum*lnum/leftsum) #returns distance ratio
+			return (rightsum/rnum)/(leftsum/rnum) #returns distance ratio
 
 		print "bad data"
 		return 0 #I should use -1 and have a proper response to it, since 0 is a possible ratio without either count being 0
 	
 
-	def walldelta(self, angles1, angles2):
+	def walldelta(self, angles1, angles2, deltas):
 
 		rightsum = 0
 		leftsum = 0
@@ -204,12 +204,18 @@ class Hoop_finder:
 
 		output = np.zeros((200), dtype = "float32")
 
-		for i in range(0, len(points)):
+		for i in range(0, len(angles1)):
 			
 			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
 
-				val = (np.cotan(angles1[0][i])-1)/np.cotan(angles1[1][i])
-				output[i] = val
+				if angles1[0][i] != 0 and angles2[0][i] != 0:				
+					#val = (1/math.tan(angles1[0][i])-1)/(1/math.tan(angles2[0][i]))
+					
+					val = deltas[0][i]
+					output[i] = val
+
+				else:
+					val = 0
 
 				if angles1[0][i] > 0:
 					rnum+=1
@@ -220,7 +226,7 @@ class Hoop_finder:
 					#if val >= 0:
 					leftsum+=val
 
-		return val, abs(rightsum)-abs(leftsum)
+		return output, abs(rightsum)-abs(leftsum)
 
 
 	def getvector(self, points1, points2): #[old point positions, new point positions, indices of regenerated points] obtains the average x, y, and radial in/out motion of points
@@ -339,11 +345,11 @@ class Hoop_finder:
 		
 		angles1 = self.getangles(self.p0)
 		angles2 = self.getangles(p1)
-		#deltas = self.getdeltas(angles1, angles2)
-		#ratio = self.wallratio(p1, angles2, deltas) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
-		vals, ratio = walldelta(angles1, angles2)
-		print ratio		
-		#print np.arctan(ratio)
+		deltas = self.getdeltas(angles1, angles2)
+		ratio = self.wallratio(p1, angles2, deltas) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
+		#vals, ratio = self.walldelta(angles1, angles2, deltas)
+		#print ratio		
+		print np.arctan(ratio)
 
 		
 		self.regenedgepoints(p1)
@@ -360,7 +366,7 @@ class Hoop_finder:
         		a,b = new.ravel()
         		c,d = old.ravel()
         		mask = cv2.line(self.mask, (a,b),(c,d), self.color[i].tolist(), 2)
-        		frame = cv2.circle(imgbgr,(a,b),5,(0, vals[i], 0),-1)
+        		frame = cv2.circle(imgbgr,(a,b),5,self.color[i].tolist(),-1)
     		imgout = cv2.add(imgbgr, self.mask)
 
 		#updates the previous frame, points, and rolling average
@@ -384,7 +390,7 @@ class Hoop_finder:
 
 
 		cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
-		cv2.circle(imgbgr, (int(self.ctrx*flow[3]*4/3.14159265358979), self.ctry), 30, (100,100,50), 10)
+		cv2.circle(imgbgr, (int(self.ctrx*flow[3]*4/3.141592), self.ctry), 30, (100,100,50), 10) #*4/3.14159265358979
 
 
 		#print p1[5][0][1] #the zero in the middle is required because the array is nominally 3 dimensional but one dimension has 0 thickness
