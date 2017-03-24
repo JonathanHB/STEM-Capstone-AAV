@@ -148,6 +148,7 @@ class Hoop_finder:
 
 				d_angles[0][i] = angles2[0][i] - angles1[0][i]
 				d_angles[1][i] = angles2[1][i] - angles1[1][i]
+				
 				#print d_angles[0][i] #yields sane results
 
 		return d_angles
@@ -174,8 +175,8 @@ class Hoop_finder:
 				
 					val = np.sin(angles[0][i])*abs(np.sin(angles[0][i]))/deltas[0][i]
 
-					#print val
-
+					
+					print np.sign(angles[0][i])*np.sign(deltas[0][i])
 					#c1+=1
 					#if val > 0:
 					#	c2+=1
@@ -183,21 +184,23 @@ class Hoop_finder:
 				else:
 					val = 0
 
-				if abs(val) <= 1000:
-
+				if abs(val) <= 20:
+					#print val
 					if angles[0][i] > 0:
-						rnum+=1			
+						rnum+=1	
+						#print val, "r"	
 						rightsum+=val
 					else:
 						lnum+=1
+						#print val, "l"
 						leftsum+=val
  
 
 		#print c2/c1
 		#print "b"
-		if leftsum != 0 and lnum != 0 and lnum != 0:
+		if rightsum != 0 and leftsum != 0 and lnum != 0 and lnum != 0:
 			#print rightsum, leftsum
-			return np.sqrt(abs((rightsum/rnum)/(leftsum/rnum))) #returns distance ratio
+			return (rightsum/rnum)/(leftsum/rnum)#))np.sqrt(abs( #returns distance ratio, still occasionally crashed due to int or 0 division; investigate this
 
 		else:
 			print "bad data"
@@ -325,7 +328,7 @@ class Hoop_finder:
 		ratio = self.wallratio(p1, angles2, deltas) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
 
 		#print ratio		
-		print np.arctan(ratio)
+		#print np.arctan(ratio)
 
 		
 		self.regenedgepoints(p1)
