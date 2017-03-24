@@ -35,15 +35,15 @@ class Hoop_finder:
 		self.mask = np.zeros((self.imagey, self.imagex, 3), dtype = "uint8") #stores point trails
 
 		self.p0 = [] #previous point set used to compute flow
-		#self.old_xdeltas1 = np.zeros((2,maxcorners), dtype = "float32")
-		#self.old_xdeltas2 = np.zeros((2,maxcorners), dtype = "float32")
 
 		self.lastangles = [] #used to compute d-theta
 
-		maxcorners = 20 #maximum number of points used
+		maxcorners = 200 #maximum number of points used
 
 		self.rollavglength = 10 #the number of values to use for the rolling average; long arrays are less sensitive and lag more, but resist noise better
+		self.rralen = 20
 		self.rollingavgdata = np.zeros((4,100), dtype = "float32") #stores the last [rollingavglength] flow values to compute mean
+		self.rra = np.zeros((self.rralen), dtype = "float32")
 		self.v = [] #horizontal velocity from bottom camera
 
 		#initializes the tracking array for regenerated points
@@ -92,6 +92,12 @@ class Hoop_finder:
 		self.rollingavgdata[2][0] = newdata[2]
 		self.rollingavgdata[3][0] = newdata[3]		
 
+		for i in range(1, self.rralen): #shifts data
+
+			self.rra[self.rralen-i] = self.rra[self.rralen-i-1]
+
+		self.rra[0] = newdata[3]
+
 
 	def get_roll_avg(self): #returns the means of the rolling average arrays
 
@@ -102,7 +108,12 @@ class Hoop_finder:
 			sums[0] += self.rollingavgdata[0][i]
 			sums[1] += self.rollingavgdata[1][i]
 			sums[2] += self.rollingavgdata[2][i]
-			sums[3] += self.rollingavgdata[3][i]
+			#sums[3] += self.rollingavgdata[3][i]
+
+		for i in range(1, self.rralen):
+
+			sums[3] += self.rra[i]
+
 
 		return [sums[0]/self.rollavglength, sums[1]/self.rollavglength, sums[2]/self.rollavglength, sums[3]/self.rollavglength] #calculates and returns averages
 	
@@ -152,81 +163,46 @@ class Hoop_finder:
 
 		c1 = 0.0
 		c2 = 0.0
-
+		#print "a"
 		for i in range(0, len(points)):
 			
 			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
 
 				#smoothdelta = (deltas[0][i] + deltas1[0][i] + deltas2[0][i])/3 #this system failed
 
-				if abs(angles[0][i]) > .15 and deltas[0][i] != 0:
+				if deltas[0][i] != 0:
 				
 					val = np.sin(angles[0][i])*abs(np.sin(angles[0][i]))/deltas[0][i]
-					#val = abs(deltas[0][i])
-					#print np.sign(val)
-					#print deltas[0][i]
-					c1+=1
-					if val > 0:
-						c2+=1
+
+					#print val
+
+					#c1+=1
+					#if val > 0:
+					#	c2+=1
 					#print "d"
 				else:
-
 					val = 0
 
-				if angles[0][i] > 0:
-					rnum+=1
-					if val >= 0:
+				if abs(val) <= 1000:
+
+					if angles[0][i] > 0:
+						rnum+=1			
 						rightsum+=val
-				else:
-					lnum+=1
-					if val >= 0:
+					else:
+						lnum+=1
 						leftsum+=val
  
-		#print rightsum
-		#print leftsum
 
 		#print c2/c1
+		#print "b"
 		if leftsum != 0 and lnum != 0 and lnum != 0:
+			#print rightsum, leftsum
+			return np.sqrt(abs((rightsum/rnum)/(leftsum/rnum))) #returns distance ratio
 
-			return (rightsum/rnum)/(leftsum/rnum) #returns distance ratio
-
-		print "bad data"
-		return 0 #I should use -1 and have a proper response to it, since 0 is a possible ratio without either count being 0
+		else:
+			print "bad data"
+			return 0 #I should use -1 and have a proper response to it, since 0 is a possible ratio without either count being 0
 	
-
-	def walldelta(self, angles1, angles2, deltas):
-
-		rightsum = 0
-		leftsum = 0
-
-		rnum = 0
-		lnum = 0
-
-		output = np.zeros((200), dtype = "float32")
-
-		for i in range(0, len(angles1)):
-			
-			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
-
-				if angles1[0][i] != 0 and angles2[0][i] != 0:				
-					#val = (1/math.tan(angles1[0][i])-1)/(1/math.tan(angles2[0][i]))
-					
-					val = deltas[0][i]
-					output[i] = val
-
-				else:
-					val = 0
-
-				if angles1[0][i] > 0:
-					rnum+=1
-					#if val >= 0:
-					rightsum+=val
-				else:
-					lnum+=1
-					#if val >= 0:
-					leftsum+=val
-
-		return output, abs(rightsum)-abs(leftsum)
 
 
 	def getvector(self, points1, points2): #[old point positions, new point positions, indices of regenerated points] obtains the average x, y, and radial in/out motion of points
@@ -347,7 +323,7 @@ class Hoop_finder:
 		angles2 = self.getangles(p1)
 		deltas = self.getdeltas(angles1, angles2)
 		ratio = self.wallratio(p1, angles2, deltas) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
-		#vals, ratio = self.walldelta(angles1, angles2, deltas)
+
 		#print ratio		
 		print np.arctan(ratio)
 
