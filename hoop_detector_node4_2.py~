@@ -154,9 +154,9 @@ class Hoop_finder:
 			if y < -self.params[2][1]:
 				y = -self.params[2][1]
 
-			#x = 0;
-			#az = 0.0000001;
-			#y = 0;
+			x = 0;
+			az = 0.0000001;
+			y = 0;
 
 			twist = Twist()
 			twist.linear.x = x; twist.linear.y = y; twist.linear.z = z; twist.angular.x = ro; twist.angular.y = po; twist.angular.z = az

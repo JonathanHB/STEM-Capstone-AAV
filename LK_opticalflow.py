@@ -41,7 +41,7 @@ class Hoop_finder:
 		maxcorners = 200 #maximum number of points used
 
 		self.rollavglength = 10 #the number of values to use for the rolling average; long arrays are less sensitive and lag more, but resist noise better
-		self.rralen = 20
+		self.rralen = 50
 		self.rollingavgdata = np.zeros((4,100), dtype = "float32") #stores the last [rollingavglength] flow values to compute mean
 		self.rra = np.zeros((self.rralen), dtype = "float32")
 		self.v = [] #horizontal velocity from bottom camera
@@ -58,6 +58,8 @@ class Hoop_finder:
 
 		self.initframe = True #used to initialize point set once on the first camera frame	
 		self.delta_init = True
+
+		self.trail_refresh = 0
 
 		self.flow = [] #the flow data computed by getvector
 
@@ -128,7 +130,7 @@ class Hoop_finder:
 
 		for i in range(0, len(points)):
 			
-			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
+			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0: #omits regenerated points
 
 				#r = np.sqrt(points[i][0][0]*points[i][0][0] + points[i][0][1]*points[i][0][1])
 
@@ -144,7 +146,7 @@ class Hoop_finder:
 
 		for i in range(0, len(self.p0)):
 			
-			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
+			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0: #omits regenerated points
 
 				d_angles[0][i] = angles2[0][i] - angles1[0][i]
 				d_angles[1][i] = angles2[1][i] - angles1[1][i]
@@ -167,7 +169,7 @@ class Hoop_finder:
 		#print "a"
 		for i in range(0, len(points)):
 			
-			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points
+			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0: #omits regenerated points
 
 				#smoothdelta = (deltas[0][i] + deltas1[0][i] + deltas2[0][i])/3 #this system failed
 
@@ -219,7 +221,7 @@ class Hoop_finder:
 
 		for i in range(0, len(points1)):
 			
-			if self.movedpts[i][0] == 0 and self.movedpts[i][0] == 0: #omits regenerated points for which flow would be computed between old and new positions
+			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0: #omits regenerated points for which flow would be computed between old and new positions
 
 				x = points2[i][0][0]-points1[i][0][0]
 				y = points2[i][0][1]-points1[i][0][1]
@@ -339,15 +341,22 @@ class Hoop_finder:
 		good_new = p1#[st==1]
 		good_old = self.p0#[st==1]
 		
+		if self.trail_refresh == 50:
+			self.mask = np.zeros_like(imgbgr)
+			self.trail_refresh = 0
+
 		#draws the tracks to show point motion
     		for i,(new,old) in enumerate(zip(good_new,good_old)):
-        		a,b = new.ravel()
-        		c,d = old.ravel()
-        		mask = cv2.line(self.mask, (a,b),(c,d), (100,127+100*angles2[0][i],100), 2)
-        		frame = cv2.circle(imgbgr,(a,b),5,(100,127+100*angles2[0][i],100),-1)#self.color[i].tolist()
-			if angles2[0][i] > 0 and p1[i][0][0] < self.ctrx:
+			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0:
+        			a,b = new.ravel()
+        			c,d = old.ravel()
+        			mask = cv2.line(self.mask, (a,b),(c,d), (100,127+10000*deltas[0][i],100), 2)#127+100*angles2[0][i]
+        			frame = cv2.circle(imgbgr,(a,b),5,(100,127+10000*deltas[0][i],100),-1)#self.color[i].tolist()
+				if angles2[0][i] > 0 and p1[i][0][0] < self.ctrx:
 
-				print "---"
+					print "---"
+
+		self.trail_refresh+=1
 
 		points = self.regenall(p1, frame_gray)
 
