@@ -20,7 +20,7 @@ class Hoop_finder:
 
 		self.sub_image = rospy.Subscriber("/ardrone/front/image_raw", Image, self.takeimage, queue_size=1) #gets front camera raw image
 		self.sub_image = rospy.Subscriber("/ardrone/odometry", Odometry, self.odometry, queue_size=1) #gets odometry data
-		self.pub_image = rospy.Publisher("~detection_image", Image, queue_size=1) #publishes the image the drone sees, with contours and ellipse superimposed
+		self.pub_image = rospy.Publisher("~detection_image", Image, queue_size=1) #publishes the drone camera image, with feature points and visual debugging images superimposed
 		self.pub_image2 = rospy.Publisher("~detection_image2", Image, queue_size=1) #used to debug image processing
 		self.pub_twist = rospy.Publisher('cmd_vel', Twist, queue_size = 1) #publishes commands to drone
 		self.bridge = CvBridge()
@@ -31,8 +31,8 @@ class Hoop_finder:
 		self.ctrx = int(self.imagex/2.0)
 		self.ctry = int(self.imagey/2.0) #coordinates of image center, in pixels
 
-		self.old_gray = np.zeros((self.imagey, self.imagex), dtype = "uint8") #grayscale version of previous image used to compute flow
-		self.mask = np.zeros((self.imagey, self.imagex, 3), dtype = "uint8") #stores point trails
+		self.old_gray = np.zeros((self.imagex, self.imagey), dtype = "uint8") #grayscale version of previous image used to compute flow !!
+		self.mask = np.zeros((self.imagex, self.imagey, 3), dtype = "uint8") #stores point trails !!
 
 		self.p0 = [] #previous point set used to compute flow
 
@@ -148,6 +148,7 @@ class Hoop_finder:
 
 				d_angles[0][i] = angles2[0][i] - angles1[0][i]
 				d_angles[1][i] = angles2[1][i] - angles1[1][i]
+				
 				#print d_angles[0][i] #yields sane results
 
 		return d_angles
@@ -175,7 +176,7 @@ class Hoop_finder:
 					val = np.sin(angles[0][i])*abs(np.sin(angles[0][i]))/deltas[0][i]
 
 					
-					print np.sign(angles[0][i])*np.sign(deltas[0][i])
+					#print np.sign(angles[0][i])*np.sign(deltas[0][i])
 					#c1+=1
 					#if val > 0:
 					#	c2+=1
@@ -323,7 +324,7 @@ class Hoop_finder:
 		
 		angles1 = self.getangles(self.p0)
 		angles2 = self.getangles(p1)
-		deltas = self.getdeltas(angles1, angles2)
+		deltas = self.getdeltas(angles1, angles2)		
 		ratio = self.wallratio(p1, angles2, deltas) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
 
 		#print ratio		
@@ -334,17 +335,22 @@ class Hoop_finder:
 
 		self.regenbadpoints(p1, st) #this plus the block of 4 methods above contribute 1.5s of lag
 
-		points = self.regenall(p1, frame_gray)
-
+		
 		good_new = p1#[st==1]
 		good_old = self.p0#[st==1]
-
+		
 		#draws the tracks to show point motion
     		for i,(new,old) in enumerate(zip(good_new,good_old)):
         		a,b = new.ravel()
         		c,d = old.ravel()
-        		mask = cv2.line(self.mask, (a,b),(c,d), self.color[i].tolist(), 2)
-        		frame = cv2.circle(imgbgr,(a,b),5,self.color[i].tolist(),-1)
+        		mask = cv2.line(self.mask, (a,b),(c,d), (100,127+100*angles2[0][i],100), 2)
+        		frame = cv2.circle(imgbgr,(a,b),5,(100,127+100*angles2[0][i],100),-1)#self.color[i].tolist()
+			if angles2[0][i] > 0 and p1[i][0][0] < self.ctrx:
+
+				print "---"
+
+		points = self.regenall(p1, frame_gray)
+
     		imgout = cv2.add(imgbgr, self.mask)
 
 		#updates the previous frame, points, and rolling average
