@@ -38,23 +38,26 @@ class Hoop_finder:
 
 		self.lastangles = [] #used to compute d-theta
 
-		maxcorners = 200 #maximum number of points used
+		self.maxcorners = 200 #maximum number of points used
 
 		self.rollavglength = 10 #the number of values to use for the rolling average; long arrays are less sensitive and lag more, but resist noise better
 		self.rralen = 50
-		self.rollingavgdata = np.zeros((4,100), dtype = "float32") #stores the last [rollingavglength] flow values to compute mean
+		self.rollingavgdata = np.zeros((3,100), dtype = "float32") #stores the last [rollingavglength] flow values to compute mean
 		self.rra = np.zeros((self.rralen), dtype = "float32")
 		self.v = [] #horizontal velocity from bottom camera
 
+		self.pprlen = 10
+		self.point_pos_reg = np.zeros((2,self.maxcorners,self.pprlen), dtype = "float32")
+
 		#initializes the tracking array for regenerated points
-		self.movedpts = np.zeros((maxcorners,2), dtype = "uint8")
+		self.movedpts = np.zeros((self.maxcorners,2), dtype = "uint8")
 
 		# Create some random colors for each trail
-		self.color = np.random.randint(0,255,(maxcorners,3))
+		self.color = np.random.randint(0,255,(self.maxcorners,3))
 		# Parameters for lucas kanade optical flow, used repeatedly
 		self.lk_params = dict(winSize  = (15,15),maxLevel = 2,criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
 		# params for ShiTomasi corner detection
-		self.feature_params = dict(maxCorners = maxcorners,qualityLevel = 0.1,minDistance = 7,blockSize = 7)
+		self.feature_params = dict(maxCorners = self.maxcorners,qualityLevel = 0.1,minDistance = 7,blockSize = 7)
 
 		self.initframe = True #used to initialize point set once on the first camera frame	
 		self.delta_init = True
@@ -65,10 +68,12 @@ class Hoop_finder:
 
 
 	def takeimage(self, img): #[front camera image from subscriber] runs image processing, and feeds the resulting pose data into the navigation algorithm
+
 		if (self.initframe): #initializes points once when program starts
 
 			self.initflow(img)
 			self.initframe = False
+
 
 		self.processimage2(img)
 	
@@ -80,6 +85,29 @@ class Hoop_finder:
 		self.v = [data.twist.twist.linear.x, data.twist.twist.linear.y]
 		
 
+	def update_ppr(self, newangles, n): #adds new angles to the rolling average array, and removes the oldest ones
+		
+		for a in range(0, n):
+
+			for i in range(1, self.pprlen):
+			
+				self.point_pos_reg[1][a][self.pprlen-i] = self.point_pos_reg[1][a][self.pprlen-i-1]
+
+			self.point_pos_reg[1][a][0] = newangles[0][a]
+
+
+	def get_ppr(self, n): #returns the slope of the regression line on the recent angles to get a robust derivative
+
+		regs = np.zeros(n, dtype = "float23")
+
+		for i in range(0, n):
+		
+			m,b = np.polyfit(self.point_pos_reg[0][i], self.point_pos_reg[1][i], 1)
+			regs[i] = -m
+
+		return regs
+
+
 	def update_roll_avg(self, newdata): #[x, y, radial] <-- flow values	adds a new data set to the rolling average array, and removes the oldest one
 		
 		for i in range(1, self.rollavglength): #shifts data
@@ -87,12 +115,10 @@ class Hoop_finder:
 			self.rollingavgdata[0][self.rollavglength-i] = self.rollingavgdata[0][self.rollavglength-i-1]
 			self.rollingavgdata[1][self.rollavglength-i] = self.rollingavgdata[1][self.rollavglength-i-1]
 			self.rollingavgdata[2][self.rollavglength-i] = self.rollingavgdata[2][self.rollavglength-i-1]
-			self.rollingavgdata[3][self.rollavglength-i] = self.rollingavgdata[3][self.rollavglength-i-1]
 
 		self.rollingavgdata[0][0] = newdata[0]
 		self.rollingavgdata[1][0] = newdata[1] #adds new data
 		self.rollingavgdata[2][0] = newdata[2]
-		self.rollingavgdata[3][0] = newdata[3]		
 
 		for i in range(1, self.rralen): #shifts data
 
@@ -110,7 +136,6 @@ class Hoop_finder:
 			sums[0] += self.rollingavgdata[0][i]
 			sums[1] += self.rollingavgdata[1][i]
 			sums[2] += self.rollingavgdata[2][i]
-			#sums[3] += self.rollingavgdata[3][i]
 
 		for i in range(1, self.rralen):
 
@@ -326,7 +351,9 @@ class Hoop_finder:
 		
 		angles1 = self.getangles(self.p0)
 		angles2 = self.getangles(p1)
-		deltas = self.getdeltas(angles1, angles2)		
+		self.update_ppr(angles2,len(p1))
+		#deltas = self.getdeltas(angles1, angles2)
+		deltas = self.get_ppr(len(p1))		
 		ratio = self.wallratio(p1, angles2, deltas) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
 
 		#print ratio		
