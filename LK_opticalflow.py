@@ -34,11 +34,11 @@ class Hoop_finder:
 		self.old_gray = np.zeros((self.imagex, self.imagey), dtype = "uint8") #grayscale version of previous image used to compute flow !!
 		self.mask = np.zeros((self.imagex, self.imagey, 3), dtype = "uint8") #stores point trails !!
 
-		self.p0 = [] #previous point set used to compute flow
+		self.maxcorners = 200 #maximum number of points used
+
+		self.p0 = np.zeros((2,0,self.maxcorners), dtype = "float32") #previous point set used to compute flow
 
 		self.lastangles = [] #used to compute d-theta
-
-		self.maxcorners = 200 #maximum number of points used
 
 		self.rollavglength = 10 #the number of values to use for the rolling average; long arrays are less sensitive and lag more, but resist noise better
 		self.rralen = 50
@@ -57,7 +57,7 @@ class Hoop_finder:
 		# Parameters for lucas kanade optical flow, used repeatedly
 		self.lk_params = dict(winSize  = (15,15),maxLevel = 2,criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
 		# params for ShiTomasi corner detection
-		self.feature_params = dict(maxCorners = self.maxcorners,qualityLevel = 0.1,minDistance = 7,blockSize = 7)
+		self.feature_params = dict(maxCorners = self.maxcorners,qualityLevel = 0.2,minDistance = 7,blockSize = 7)
 
 		self.initframe = True #used to initialize point set once on the first camera frame	
 		self.delta_init = True
@@ -72,6 +72,7 @@ class Hoop_finder:
 		if (self.initframe): #initializes points once when program starts
 
 			self.initflow(img)
+			self.gen_ppr_arg()
 			self.initframe = False
 
 
@@ -84,6 +85,15 @@ class Hoop_finder:
 		#print data.twist.twist.linear.y
 		self.v = [data.twist.twist.linear.x, data.twist.twist.linear.y]
 		
+
+	def gen_ppr_arg(self): #generates the equally spaced x-value array used to compute hoop angle regression; runs only once
+
+		for a in range(0, self.maxcorners):
+
+			for i in range(0,self.pprlen):
+
+				self.point_pos_reg[0][a][i] = i
+
 
 	def update_ppr(self, newangles, n): #adds new angles to the rolling average array, and removes the oldest ones
 		
@@ -98,11 +108,16 @@ class Hoop_finder:
 
 	def get_ppr(self, n): #returns the slope of the regression line on the recent angles to get a robust derivative
 
-		regs = np.zeros(n, dtype = "float23")
+		regs = np.zeros(n, dtype = "float32")
 
 		for i in range(0, n):
 		
-			m,b = np.polyfit(self.point_pos_reg[0][i], self.point_pos_reg[1][i], 1)
+			a = self.point_pos_reg[0][i]
+			c = self.point_pos_reg[1][i]
+
+			#print a[5]
+
+			m,b = np.polyfit(a, c, 1)
 			regs[i] = -m
 
 		return regs
@@ -151,7 +166,7 @@ class Hoop_finder:
 
 		#range = +- 38deg, the current camera model looks decent, z is computed as (pixel distance from image center)*cot(angle of that point obtained from protractor)
 
-		angles = [[0.0]*len(points), [0.0]*len(points)]
+		angles = np.zeros((2, len(points)), dtype = "float32")
 
 		for i in range(0, len(points)):
 			
@@ -167,16 +182,30 @@ class Hoop_finder:
 
 	def getdeltas(self, angles1, angles2): #[old angles, new angles] returns an array of the change in angle of each point
 
-		d_angles = np.zeros((2,200), dtype = "float32")
+		d_angles = np.zeros((3,200), dtype = "float32")
 
-		for i in range(0, len(self.p0)):
+		n = 0
+		totald = 0
+
+		for i in range(0, len(angles2[0])):
 			
 			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0: #omits regenerated points
 
 				d_angles[0][i] = angles2[0][i] - angles1[0][i]
 				d_angles[1][i] = angles2[1][i] - angles1[1][i]
 				
+				n+=1
+				totald += d_angles[0][i]
 				#print d_angles[0][i] #yields sane results
+
+		#print totald
+
+		for i in range(0, len(angles2[0])):
+			
+			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0: #omits regenerated points
+
+				d_angles[2][i] = d_angles[0][i]-totald/n
+				#print d_angles[2][i]
 
 		return d_angles
 
@@ -198,9 +227,9 @@ class Hoop_finder:
 
 				#smoothdelta = (deltas[0][i] + deltas1[0][i] + deltas2[0][i])/3 #this system failed
 
-				if deltas[0][i] != 0:
+				if deltas[2][i] != 0:
 				
-					val = np.sin(angles[0][i])*abs(np.sin(angles[0][i]))/deltas[0][i]
+					val = np.sin(angles[0][i])*abs(np.sin(angles[0][i]))/deltas[2][i]
 
 					
 					#print np.sign(angles[0][i])*np.sign(deltas[0][i])
@@ -305,7 +334,7 @@ class Hoop_finder:
 								
 		if m != 0:
 
-			fp3 = dict(maxCorners = m, qualityLevel = 0.1,minDistance = 7,blockSize = 7)
+			fp3 = dict(maxCorners = m, qualityLevel = 0.2,minDistance = 7,blockSize = 7)
 
 			newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #generates a batch of as many points need regeneration
 
@@ -346,19 +375,18 @@ class Hoop_finder:
 
 		# calculates optical flow, p1 is an array of the feature points in their new positions
 		p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_gray, frame_gray, self.p0, None, **self.lk_params)
-		 
+
 		self.getvector(self.p0, p1)
 		
 		angles1 = self.getangles(self.p0)
 		angles2 = self.getangles(p1)
 		self.update_ppr(angles2,len(p1))
-		#deltas = self.getdeltas(angles1, angles2)
-		deltas = self.get_ppr(len(p1))		
+		deltas = self.getdeltas(angles1, angles2)
+		#deltas = self.get_ppr(len(p1))		
 		ratio = self.wallratio(p1, angles2, deltas) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
 
 		#print ratio		
 		#print np.arctan(ratio)
-
 		
 		self.regenedgepoints(p1)
 
@@ -372,13 +400,15 @@ class Hoop_finder:
 			self.mask = np.zeros_like(imgbgr)
 			self.trail_refresh = 0
 
+		demobg = np.zeros_like(imgbgr)
+
 		#draws the tracks to show point motion
     		for i,(new,old) in enumerate(zip(good_new,good_old)):
 			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0:
         			a,b = new.ravel()
         			c,d = old.ravel()
-        			mask = cv2.line(self.mask, (a,b),(c,d), (100,127+10000*deltas[0][i],100), 2)#127+100*angles2[0][i]
-        			frame = cv2.circle(imgbgr,(a,b),5,(100,127+10000*deltas[0][i],100),-1)#self.color[i].tolist()
+        			mask = cv2.line(self.mask, (a,b),(c,d), (100,127+30000*deltas[2][i],100), 2)#127+100*angles2[0][i]
+        			frame = cv2.circle(imgbgr,(a,b),5,(100,127+30000*deltas[2][i],100),-1)#self.color[i].tolist()
 				if angles2[0][i] > 0 and p1[i][0][0] < self.ctrx:
 
 					print "---"
@@ -401,6 +431,7 @@ class Hoop_finder:
 		
 		ctr = (self.ctrx+int(9*flow[0]), self.ctry+int(9*flow[1]))
 		#ctr = 400,180
+		print flow[3]
 		color = ()
 		if flow[2]>=0:
 			color = (100,20,100)
@@ -410,7 +441,7 @@ class Hoop_finder:
 
 
 		cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
-		cv2.circle(imgbgr, (int(self.ctrx*flow[3]*4/3.141592), self.ctry), 30, (100,100,50), 10) #*4/3.14159265358979
+		cv2.circle(imgbgr, (int(-self.ctrx*flow[3]*4/3.141592), self.ctry), 30, (100,100,50), 10) #*4/3.14159265358979
 
 
 		#print p1[5][0][1] #the zero in the middle is required because the array is nominally 3 dimensional but one dimension has 0 thickness
