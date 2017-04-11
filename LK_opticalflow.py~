@@ -98,7 +98,7 @@ class Hoop_finder:
 
 	def get_ppr(self, n): #returns the slope of the regression line on the recent angles to get a robust derivative
 
-		regs = np.zeros(n, dtype = "float23")
+		regs = np.zeros(n, dtype = "float32")
 
 		for i in range(0, n):
 		
@@ -353,7 +353,7 @@ class Hoop_finder:
 		angles2 = self.getangles(p1)
 		self.update_ppr(angles2,len(p1))
 		#deltas = self.getdeltas(angles1, angles2)
-		deltas = self.getppr(len(p1))		
+		deltas = self.get_ppr(len(p1))		
 		ratio = self.wallratio(p1, angles2, deltas) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
 
 		#print ratio		

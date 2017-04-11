@@ -21,7 +21,8 @@ class Hoop_finder:
 		self.sub_image = rospy.Subscriber("/ardrone/image_raw", Image, self.takeimage, queue_size=1) #gets front camera raw image
 		self.sub_image = rospy.Subscriber("/ardrone/odometry", Odometry, self.odometry, queue_size=1) #gets odometry data
 		self.pub_image = rospy.Publisher("~detection_image", Image, queue_size=1) #publishes the image the drone sees, with contours and ellipse superimposed
-		self.publand = rospy.Publisher('ardrone/land',Empty,queue_size=1)		
+		self.pub_land = rospy.Publisher('/ardrone/land',Empty,queue_size=1)	
+		self.pub_takeoff = rospy.Publisher('/ardrone/takeoff',Empty,queue_size=1)			
 		#self.pub_image2 = rospy.Publisher("~detection_image2", Image, queue_size=1) #used to debug image processing
 		self.pub_twist = rospy.Publisher('cmd_vel', Twist, queue_size = 1) #publishes commands to drone
 		self.bridge = CvBridge()
@@ -95,14 +96,19 @@ class Hoop_finder:
 		if not self.hasflownthrough:
 
 			self.hasflownthrough = True #prevents this from running repeatedly and sending the drone out of control
+			time.sleep(1)
+		
+			self.pub_takeoff.publish(Empty())
+
+			time.sleep(2)
 
 			twist = Twist()
-			twist.linear.x = .05; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
+			twist.linear.x = .1; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
 			self.pub_twist.publish(twist) 
 			print "cmdsent"
 			time.sleep(3)
 
-			self.publand.publish(Empty)
+			self.pub_land.publish(Empty())
 			print "done"
 
 
