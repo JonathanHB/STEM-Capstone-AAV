@@ -34,9 +34,9 @@ class Hoop_finder:
 		self.old_gray = np.zeros((self.imagex, self.imagey), dtype = "uint8") #grayscale version of previous image used to compute flow !!
 		self.mask = np.zeros((self.imagex, self.imagey, 3), dtype = "uint8") #stores point trails !!
 
-		self.maxcorners = 200 #maximum number of points used
+		self.maxcorners = 30 #maximum number of points used
 
-		self.p0 = np.zeros((2,0,self.maxcorners), dtype = "float32") #previous point set used to compute flow
+		self.p0 = np.zeros((self.maxcorners,1,2), dtype = "float32") #previous point set used to compute flow
 
 		self.lastangles = [] #used to compute d-theta
 
@@ -44,10 +44,7 @@ class Hoop_finder:
 		self.rralen = 50
 		self.rollingavgdata = np.zeros((3,100), dtype = "float32") #stores the last [rollingavglength] flow values to compute mean
 		self.rra = np.zeros((self.rralen), dtype = "float32")
-		self.v = [] #horizontal velocity from bottom camera
-
-		self.pprlen = 10
-		self.point_pos_reg = np.zeros((2,self.maxcorners,self.pprlen), dtype = "float32")
+		self.v = np.zeros((2), dtype = "float32") #horizontal velocity from bottom camera
 
 		#initializes the tracking array for regenerated points
 		self.movedpts = np.zeros((self.maxcorners,2), dtype = "uint8")
@@ -66,13 +63,21 @@ class Hoop_finder:
 
 		self.flow = [] #the flow data computed by getvector
 
+		self.fast = cv2.FastFeatureDetector()
+
+		self.n = 0
+
+		self.angles_old = np.zeros((2,self.maxcorners), dtype = "float32")
+
+		self.deltas = []
+		self.positions = []
+
 
 	def takeimage(self, img): #[front camera image from subscriber] runs image processing, and feeds the resulting pose data into the navigation algorithm
 
 		if (self.initframe): #initializes points once when program starts
 
 			self.initflow(img)
-			self.gen_ppr_arg()
 			self.initframe = False
 
 
@@ -84,44 +89,8 @@ class Hoop_finder:
 		#print data
 		#print data.twist.twist.linear.y
 		self.v = [data.twist.twist.linear.x, data.twist.twist.linear.y]
+		#print self.v
 		
-
-	def gen_ppr_arg(self): #generates the equally spaced x-value array used to compute hoop angle regression; runs only once
-
-		for a in range(0, self.maxcorners):
-
-			for i in range(0,self.pprlen):
-
-				self.point_pos_reg[0][a][i] = i
-
-
-	def update_ppr(self, newangles, n): #adds new angles to the rolling average array, and removes the oldest ones
-		
-		for a in range(0, n):
-
-			for i in range(1, self.pprlen):
-			
-				self.point_pos_reg[1][a][self.pprlen-i] = self.point_pos_reg[1][a][self.pprlen-i-1]
-
-			self.point_pos_reg[1][a][0] = newangles[0][a]
-
-
-	def get_ppr(self, n): #returns the slope of the regression line on the recent angles to get a robust derivative
-
-		regs = np.zeros(n, dtype = "float32")
-
-		for i in range(0, n):
-		
-			a = self.point_pos_reg[0][i]
-			c = self.point_pos_reg[1][i]
-
-			#print a[5]
-
-			m,b = np.polyfit(a, c, 1)
-			regs[i] = -m
-
-		return regs
-
 
 	def update_roll_avg(self, newdata): #[x, y, radial] <-- flow values	adds a new data set to the rolling average array, and removes the oldest one
 		
@@ -182,10 +151,7 @@ class Hoop_finder:
 
 	def getdeltas(self, angles1, angles2): #[old angles, new angles] returns an array of the change in angle of each point
 
-		d_angles = np.zeros((3,200), dtype = "float32")
-
-		n = 0
-		totald = 0
+		d_angles = np.zeros((2,self.maxcorners), dtype = "float32")
 
 		for i in range(0, len(angles2[0])):
 			
@@ -193,104 +159,34 @@ class Hoop_finder:
 
 				d_angles[0][i] = angles2[0][i] - angles1[0][i]
 				d_angles[1][i] = angles2[1][i] - angles1[1][i]
-				
-				n+=1
-				totald += d_angles[0][i]
-				#print d_angles[0][i] #yields sane results
-
-		#print totald
-
-		for i in range(0, len(angles2[0])):
-			
-			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0: #omits regenerated points
-
-				d_angles[2][i] = d_angles[0][i]-totald/n
-				#print d_angles[2][i]
-
+				#print d_angles[0][i]
 		return d_angles
 
 
-	def wallratio(self, points, angles, deltas): #computes the ratio of distances to the two walls, assuming the drone is parallel to them and not moving laterally or turning
+	def getlocations(self, angles, deltas, velocity):
 
-		rightsum = 0
-		leftsum = 0
+		locations = np.zeros((self.maxcorners,2), dtype = "float32")
 
-		rnum = 0
-		lnum = 0
-
-		c1 = 0.0
-		c2 = 0.0
-		#print "a"
-		for i in range(0, len(points)):
+		for i in range(0, len(angles[0])):
 			
 			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0: #omits regenerated points
 
-				#smoothdelta = (deltas[0][i] + deltas1[0][i] + deltas2[0][i])/3 #this system failed
+				if deltas[0][i] != 0 and velocity[1] != 0 and velocity[0] != 0:
 
-				if deltas[2][i] != 0:
-				
-					val = np.sin(angles[0][i])*abs(np.sin(angles[0][i]))/deltas[2][i]
+					distance = (velocity[1]-np.tan(angles[0][i])*velocity[0])*np.cos(angles[0][i])/deltas[0][i]
 
-					
-					#print np.sign(angles[0][i])*np.sign(deltas[0][i])
-					#c1+=1
-					#if val > 0:
-					#	c2+=1
-					#print "d"
+					locations[i][0] = distance*np.sin(angles[0][i])  #lateral location
+					locations[i][1] = distance*np.cos(angles[0][i])  #axial location
+
 				else:
-					val = 0
 
-				if abs(val) <= 20:
-					#print val
-					if angles[0][i] > 0:
-						rnum+=1	
-						#print val, "r"	
-						rightsum+=val
-					else:
-						lnum+=1
-						#print val, "l"
-						leftsum+=val
- 
+					locations[i][0] = 0
+					locations[i][1] = 0
 
-		#print c2/c1
-		#print "b"
-		if rightsum != 0 and leftsum != 0 and lnum != 0 and lnum != 0:
-			#print rightsum, leftsum
-			return (rightsum/rnum)/(leftsum/rnum)#))np.sqrt(abs( #returns distance ratio, still occasionally crashed due to int or 0 division; investigate this
+		return locations
 
-		else:
-			print "bad data"
-			return 0 #I should use -1 and have a proper response to it, since 0 is a possible ratio without either count being 0
+
 	
-
-
-	def getvector(self, points1, points2): #[old point positions, new point positions, indices of regenerated points] obtains the average x, y, and radial in/out motion of points
-
-		totalx = 0 #turns into average x/y
-		totaly = 0
-
-		totalrad = 0 #turns into average radial motion
-
-		pairs = 0
-
-		for i in range(0, len(points1)):
-			
-			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0: #omits regenerated points for which flow would be computed between old and new positions
-
-				x = points2[i][0][0]-points1[i][0][0]
-				y = points2[i][0][1]-points1[i][0][1]
-
-				totalx+=x
-				totaly+=y
-
-				px = points2[i][0][0]-self.ctrx
-				py = points2[i][0][1]-self.ctry
-
-				totalrad += (x*px + y*py)/(px*px+py*py) #the raw dot product is weighted in favor of points near the edges; this is the most computationally efficient way to do it as far as I know, but idk if it is desirable, I should do some geometry to try to figure out what if any weighting is optimal
-
-		self.flow = [totalx/len(points1), totaly/len(points1), totalrad/len(points1)] #returns average flow values
-
-		
 	def regenbadpoints(self, points, quality): #[point locations, list of points with and without flow] flags and deflags points for which flow cannot be found
 
 		for x in range(0, len(points)): 
@@ -336,7 +232,11 @@ class Hoop_finder:
 
 			fp3 = dict(maxCorners = m, qualityLevel = 0.2,minDistance = 7,blockSize = 7)
 
-			newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #generates a batch of as many points need regeneration
+			#newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #generates a batch of as many points need regeneration
+
+			newpts = self.fast.detect(gray,None)
+
+			#print newpts[0].pt
 
 			c = 0
 
@@ -346,7 +246,7 @@ class Hoop_finder:
 
 				if self.movedpts[x][0] == 1 or self.movedpts[x][1] == 1:
 				
-					points[x][0] = newpts[c][0] #replaces points flagged for regeneration
+					points[x] = newpts[c].pt #replaces points flagged for regeneration
 					c+=1
 					if c==l:
 						break #terminates once all new points have been used
@@ -355,8 +255,6 @@ class Hoop_finder:
 		return points #returns updated point array
 				
 		
-
-
 	def initflow(self, imgdrone1): #generates feature point array for LK optical flow
 	
 		#converts from drone image to bgr8 for opencv
@@ -364,7 +262,14 @@ class Hoop_finder:
 		# Creates a grayscale version of the camera image
 		self.old_gray = cv2.cvtColor(imgbgr, cv2.COLOR_BGR2GRAY)
 		# Take first frame and find corners in it
-		self.p0 = cv2.goodFeaturesToTrack(self.old_gray, mask = None, **self.feature_params)
+
+		#self.p0 = cv2.goodFeaturesToTrack(self.old_gray, mask = None, **self.feature_params)
+		kpts = self.fast.detect(self.old_gray,None)
+
+		for i in range(0, self.maxcorners):
+
+			self.p0[i][0] = [kpts[i].pt[0], kpts[i].pt[1]]
+
 		# Create a mask image for drawing purposes
 		self.mask = np.zeros_like(imgbgr)
 
@@ -376,22 +281,21 @@ class Hoop_finder:
 		# calculates optical flow, p1 is an array of the feature points in their new positions
 		p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_gray, frame_gray, self.p0, None, **self.lk_params)
 
-		self.getvector(self.p0, p1)
-		
-		angles1 = self.getangles(self.p0)
-		angles2 = self.getangles(p1)
-<<<<<<< HEAD
-		#self.update_ppr(angles2,len(p1))
-=======
-		self.update_ppr(angles2,len(p1))
->>>>>>> fb8479f9d621c97845c93e8ba0a6fbf24d8fc45a
-		deltas = self.getdeltas(angles1, angles2)
-		#deltas = self.get_ppr(len(p1))		
-		ratio = self.wallratio(p1, angles2, deltas) #these 4 methods plus regenbadpoints collectively contribute about 1.5s of lag
+		interval = 10.0
 
-		#print ratio		
-		#print np.arctan(ratio)
-		
+		if round(self.n/interval) == self.n/interval:
+
+			#angles1 = self.getangles(self.p0)
+			angles2 = self.getangles(p1)
+			self.deltas = self.getdeltas(self.angles_old, angles2)
+			self.angles_old = angles2
+
+			self.positions = self.getlocations(angles2, self.deltas, self.v)
+			
+			points = self.regenall(p1, frame_gray)
+
+		self.n+=1		
+
 		self.regenedgepoints(p1)
 
 		self.regenbadpoints(p1, st) #this plus the block of 4 methods above contribute 1.5s of lag
@@ -411,44 +315,33 @@ class Hoop_finder:
 			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0:
         			a,b = new.ravel()
         			c,d = old.ravel()
-        			mask = cv2.line(self.mask, (a,b),(c,d), (100,127+30000*deltas[2][i],100), 2)#127+100*angles2[0][i]
-        			frame = cv2.circle(imgbgr,(a,b),5,(100,127+30000*deltas[2][i],100),-1)#self.color[i].tolist()
-				if angles2[0][i] > 0 and p1[i][0][0] < self.ctrx:
+        			mask = cv2.line(self.mask, (a,b),(c,d), (127,127+30000*self.deltas[0][i],100), 2)#127+100*angles2[0][i]
+				#print positions[i][1]
+				frame = cv2.circle(imgbgr,(a,b),5,(127,int(127+0*self.positions[i][0]),int(127+5*self.positions[i][1])),-1)
+        			#frame = cv2.circle(imgbgr,(self.ctrx+int(self.positions[i][0]),self.ctry+int(self.positions[i][1])),5,(127,27,200),-1)#self.color[i].tolist()
+				#if angles2[0][i] > 0 and p1[i][0][0] < self.ctrx:
 
-					print "---"
+					#print "---"
 
 		self.trail_refresh+=1
 
-		points = self.regenall(p1, frame_gray)
+
 
     		imgout = cv2.add(imgbgr, self.mask)
 
 		#updates the previous frame, points, and rolling average
     		self.old_gray = frame_gray.copy()
    		self.p0 = p1
-		self.update_roll_avg([self.flow[0], self.flow[1], self.flow[2], np.arctan(ratio)])
+		#self.update_roll_avg([self.flow[0], self.flow[1], self.flow[2], 0)
 		
 		#print self.v
 
-		#draws a circle onto the camera image based on flow vector for visual debugging
-		flow = self.get_roll_avg()
 		
-		ctr = (self.ctrx+int(9*flow[0]), self.ctry+int(9*flow[1]))
-		#ctr = 400,180
-		print flow[3]
-		color = ()
-		if flow[2]>=0:
-			color = (100,20,100)
-		else:
-			color = (100,200,100)
-			#print "reverse"
+		
+		#cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
+		#cv2.circle(imgbgr, (int(-self.ctrx*flow[3]*4/3.141592), self.ctry), 30, (100,100,50), 10) #*4/3.14159265358979
 
-
-		cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
-		cv2.circle(imgbgr, (int(-self.ctrx*flow[3]*4/3.141592), self.ctry), 30, (100,100,50), 10) #*4/3.14159265358979
-
-
-		#print p1[5][0][1] #the zero in the middle is required because the array is nominally 3 dimensional but one dimension has 0 thickness
+		cv2.circle(imgbgr, (int(self.ctrx-200*self.v[1]), int(self.ctry-200*self.v[0])), 30, (100,90,100), 10)
 
 		imgdrone = self.bridge.cv2_to_imgmsg(imgbgr, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
 
