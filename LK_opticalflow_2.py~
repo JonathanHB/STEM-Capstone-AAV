@@ -52,7 +52,7 @@ class Hoop_finder:
 		# Create some random colors for each trail
 		self.color = np.random.randint(0,255,(self.maxcorners,3))
 		# Parameters for lucas kanade optical flow, used repeatedly
-		self.lk_params = dict(winSize  = (15,15),maxLevel = 2,criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+		self.lk_params = dict(winSize  = (15,15),maxLevel = 5,criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
 		# params for ShiTomasi corner detection
 		self.feature_params = dict(maxCorners = self.maxcorners,qualityLevel = 0.2,minDistance = 7,blockSize = 7)
 
@@ -167,6 +167,8 @@ class Hoop_finder:
 
 		locations = np.zeros((self.maxcorners,2), dtype = "float32")
 
+		radii = np.zeros((self.maxcorners), dtype = "float32")
+
 		for i in range(0, len(angles[0])):
 			
 			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0: #omits regenerated points
@@ -177,13 +179,15 @@ class Hoop_finder:
 
 					locations[i][0] = distance*np.sin(angles[0][i])  #lateral location
 					locations[i][1] = distance*np.cos(angles[0][i])  #axial location
-
+					radii[i] = distance
+					#print locations[i][0], locations[i][1]
 				else:
 
 					locations[i][0] = 0
 					locations[i][1] = 0
+					radii[i] = 0
 
-		return locations
+		return locations, radii
 
 
 	
@@ -290,7 +294,7 @@ class Hoop_finder:
 			self.deltas = self.getdeltas(self.angles_old, angles2)
 			self.angles_old = angles2
 
-			self.positions = self.getlocations(angles2, self.deltas, self.v)
+			self.positions, distances = self.getlocations(angles2, self.deltas, self.v)
 			
 			points = self.regenall(p1, frame_gray)
 
@@ -309,6 +313,7 @@ class Hoop_finder:
 			self.trail_refresh = 0
 
 		demobg = np.zeros_like(imgbgr)
+		frame_gray2 = frame_gray.copy()
 
 		#draws the tracks to show point motion
     		for i,(new,old) in enumerate(zip(good_new,good_old)):
@@ -317,9 +322,9 @@ class Hoop_finder:
         			c,d = old.ravel()
         			mask = cv2.line(self.mask, (a,b),(c,d), (127,127+30000*self.deltas[0][i],100), 2)#127+100*angles2[0][i]
 				#print positions[i][1]
-				frame = cv2.circle(imgbgr,(a,b),5,(127,int(127+0*self.positions[i][0]),int(127+5*self.positions[i][1])),-1)
-        			frame = cv2.circle(imgbgr,(self.ctrx+int(self.positions[i][0]),self.ctry+int(self.positions[i][1])),5,(127,27,127),-1)#self.color[i].tolist()
-				print positions[i][0]
+				frame = cv2.circle(frame_gray2,(a,b),5,(127,int(127+5*self.positions[i][0]),int(127+5*self.positions[i][1])),-1)
+        			frame = cv2.circle(frame_gray2,(self.ctrx+int(12*self.positions[i][0]),self.imagey-int(12*self.positions[i][1])),5,(127,27,127),-1)#self.color[i].tolist()
+
 				#if angles2[0][i] > 0 and p1[i][0][0] < self.ctrx:
 
 					#print "---"
@@ -332,7 +337,7 @@ class Hoop_finder:
 
 		#updates the previous frame, points, and rolling average
     		self.old_gray = frame_gray.copy()
-   		self.p0 = p1
+   		self.p0 = p1.copy()
 		#self.update_roll_avg([self.flow[0], self.flow[1], self.flow[2], 0)
 		
 		#print self.v
@@ -342,9 +347,9 @@ class Hoop_finder:
 		#cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
 		#cv2.circle(imgbgr, (int(-self.ctrx*flow[3]*4/3.141592), self.ctry), 30, (100,100,50), 10) #*4/3.14159265358979
 
-		cv2.circle(imgbgr, (int(self.ctrx-200*self.v[1]), int(self.ctry-200*self.v[0])), 30, (100,90,100), 10)
-
-		imgdrone = self.bridge.cv2_to_imgmsg(imgbgr, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
+		cv2.circle(frame_gray2, (int(self.ctrx-200*self.v[1]), int(self.ctry-200*self.v[0])), 30, (100,90,100), 10)
+		nongray = cv2.cvtColor(frame_gray2, cv2.COLOR_GRAY2BGR)
+		imgdrone = self.bridge.cv2_to_imgmsg(nongray, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
 
 		self.pub_image.publish(imgdrone)
 
