@@ -250,10 +250,24 @@ class Hoop_finder:
 
 				if self.movedpts[x][0] == 1 or self.movedpts[x][1] == 1:
 				
-					points[x] = newpts[c].pt #replaces points flagged for regeneration
-					c+=1
-					if c==l:
-						break #terminates once all new points have been used
+					for i in range(c,l):
+
+						print newpts[i].pt
+
+						if gray[newpts[i].pt[1]][newpts[i].pt[0]] != 255:
+
+							points[x] = newpts[i].pt #replaces points flagged for regeneration
+							c+=1
+							if c==l:
+								break #terminates once all new points have been used
+
+						else: 
+
+							c+=1
+							if c==l:
+								break #terminates once all new points have been used
+					
+					
 
 			
 		return points #returns updated point array
@@ -314,7 +328,7 @@ class Hoop_finder:
 			self.trail_refresh = 0
 
 		demobg = np.zeros_like(imgbgr)
-		frame_gray2 = frame_gray.copy()
+		frame_gray2 = cv2.cvtColor(frame_gray, cv2.COLOR_GRAY2BGR)
 
 		#draws the tracks to show point motion
     		for i,(new,old) in enumerate(zip(good_new,good_old)):
@@ -349,8 +363,8 @@ class Hoop_finder:
 		#cv2.circle(imgbgr, (int(-self.ctrx*flow[3]*4/3.141592), self.ctry), 30, (100,100,50), 10) #*4/3.14159265358979
 
 		cv2.circle(frame_gray2, (int(self.ctrx-200*self.v[1]), int(self.ctry-200*self.v[0])), 30, (100,90,100), 10)
-		nongray = cv2.cvtColor(frame_gray2, cv2.COLOR_GRAY2BGR)
-		imgdrone = self.bridge.cv2_to_imgmsg(nongray, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
+		#nongray = cv2.cvtColor(frame_gray2, cv2.COLOR_GRAY2BGR)
+		imgdrone = self.bridge.cv2_to_imgmsg(frame_gray2, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
 
 		self.pub_image.publish(imgdrone)
 
