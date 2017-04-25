@@ -236,7 +236,7 @@ class Hoop_finder:
 
 			fp3 = dict(maxCorners = m, qualityLevel = 0.2,minDistance = 7,blockSize = 7)
 
-			#newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #generates a batch of as many points need regeneration
+			newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #generates a batch of as many points as need regeneration
 
 			newpts = self.fast.detect(gray,None)
 
@@ -250,22 +250,22 @@ class Hoop_finder:
 
 				if self.movedpts[x][0] == 1 or self.movedpts[x][1] == 1:
 				
-					for i in range(c,l):
+					#for i in range(c,l):
 
-						print newpts[i].pt
+						#print gray[newpts[i].pt[1]][newpts[i].pt[0]]
 
-						if gray[newpts[i].pt[1]][newpts[i].pt[0]] != 255:
+						#if gray[newpts[i].pt[1]][newpts[i].pt[0]] < 110:
 
-							points[x] = newpts[i].pt #replaces points flagged for regeneration
-							c+=1
-							if c==l:
-								break #terminates once all new points have been used
+					points[x] = newpts[c].pt #replaces points flagged for regeneration
+						#	c+=1
+							
+						#	break #terminates once all new points have been used
 
-						else: 
+						#else: 
 
-							c+=1
-							if c==l:
-								break #terminates once all new points have been used
+					c+=1
+					if c==l:
+						break #terminates once all new points have been used
 					
 					
 
@@ -281,12 +281,12 @@ class Hoop_finder:
 		self.old_gray = cv2.cvtColor(imgbgr, cv2.COLOR_BGR2GRAY)
 		# Take first frame and find corners in it
 
-		#self.p0 = cv2.goodFeaturesToTrack(self.old_gray, mask = None, **self.feature_params)
+		self.p0 = cv2.goodFeaturesToTrack(self.old_gray, mask = None, **self.feature_params)
 		kpts = self.fast.detect(self.old_gray,None)
 
-		for i in range(0, self.maxcorners):
+		#for i in range(0, self.maxcorners):
 
-			self.p0[i][0] = [kpts[i].pt[0], kpts[i].pt[1]]
+		#	self.p0[i][0] = [kpts[i].pt[0], kpts[i].pt[1]]
 
 		# Create a mask image for drawing purposes
 		self.mask = np.zeros_like(imgbgr)
@@ -337,8 +337,8 @@ class Hoop_finder:
         			c,d = old.ravel()
         			mask = cv2.line(self.mask, (a,b),(c,d), (127,127+30000*self.deltas[0][i],100), 2)#127+100*angles2[0][i]
 				#print positions[i][1]
-				frame = cv2.circle(frame_gray2,(a,b),5,(127,int(127+5*self.positions[i][0]),int(127+5*self.positions[i][1])),-1)
-        			frame = cv2.circle(frame_gray2,(self.ctrx+int(12*self.positions[i][0]),self.imagey-int(12*self.positions[i][1])),5,(127,27,127),-1)#self.color[i].tolist()
+				frame = cv2.circle(frame_gray2,(a,b),5,(127,int(127+0*self.positions[i][0]),int(127+0*self.positions[i][1])),-1)#color constants 5,5
+        			#frame = cv2.circle(frame_gray2,(self.ctrx+int(12*self.positions[i][0]),self.imagey-int(12*self.positions[i][1])),5,(127,27,127),-1)#self.color[i].tolist()
 
 				#if angles2[0][i] > 0 and p1[i][0][0] < self.ctrx:
 
