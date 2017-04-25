@@ -238,8 +238,10 @@ class Hoop_finder:
 
 			newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #generates a batch of as many points as need regeneration
 
-			newpts = self.fast.detect(gray,None)
+			#newpts = self.fast.detect(gray,None)
 
+			
+			
 			#print newpts[0].pt
 
 			c = 0
@@ -256,7 +258,7 @@ class Hoop_finder:
 
 						#if gray[newpts[i].pt[1]][newpts[i].pt[0]] < 110:
 
-					points[x] = newpts[i].pt #replaces points flagged for regeneration
+					points[x] = newpts[c]#.pt #replaces points flagged for regeneration
 						#	c+=1
 							
 						#	break #terminates once all new points have been used
@@ -319,6 +321,22 @@ class Hoop_finder:
 
 		self.regenbadpoints(p1, st) #this plus the block of 4 methods above contribute 1.5s of lag
 
+		newpts = cv2.cornerHarris(frame_gray,2,3,0.01)
+		newpts = cv2.dilate(newpts,None)
+
+		#params
+		#img - Input image, it should be grayscale and float32 type.
+		#blockSize - It is the size of neighbourhood considered for corner detection
+		#larger values mean more features are found, must be an integer greater than 1, default 2
+		#ksize - Aperture parameter of Sobel derivative used.
+		#effect unclear; default 3
+		#k - Harris detector free parameter in the equation.
+		#larger values = more points but slower and vice versa, default .04
+		
+
+		harris_test = imgbgr.copy()
+		harris_test[newpts>0.01*newpts.max() and a.all(harris_test <= 250)]=[0,0,255]
+
 		
 		good_new = p1#[st==1]
 		good_old = self.p0#[st==1]
@@ -368,7 +386,7 @@ class Hoop_finder:
 
 		self.pub_image.publish(imgdrone)
 
-		imgdrone2 = self.bridge.cv2_to_imgmsg(imgout, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
+		imgdrone2 = self.bridge.cv2_to_imgmsg(harris_test, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
 
 		self.pub_image2.publish(imgdrone2)
 
