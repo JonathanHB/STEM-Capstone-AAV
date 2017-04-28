@@ -299,10 +299,10 @@ class Hoop_finder:
 		imgbgr = self.bridge.imgmsg_to_cv2(imgdrone1, "bgr8") #converts from drone image to bgr8 for opencv
 		frame_gray = cv2.cvtColor(imgbgr, cv2.COLOR_BGR2GRAY) # Creates a grayscale version of the camera image
 
-		hgray = cv2.cornerHarris(frame_gray,2,3,0.01)
-		hgray = cv2.dilate(hgray,None)
+		#hgray = cv2.cornerHarris(frame_gray,2,3,0.01)
+		#hgray = cv2.dilate(hgray,None)
 		
-		#frame_gray2 = np.zeros((self.imagex, self.imagey), dtype = "uint8") #grayscale version of previous image used to compute flow !!
+		#frame_gray2 = np.zeros((self.imagex, self.imagey), dtype = "uint8") #grayscale version of previous image used to compute flow
 		#hgray.convertTo(frame_gray2, CV_8U)
 
 		#print hgray
@@ -348,8 +348,8 @@ class Hoop_finder:
 		#larger values = more points but slower and vice versa, default .04
 		
 
-		harris_test = imgbgr.copy()
-		harris_test[hgray>0.01*hgray.max()]=[0,0,255]# and a.all(harris_test <= 250)
+		#harris_test = imgbgr.copy()
+		#harris_test[hgray>0.01*hgray.max()]=[0,0,255]# and a.all(harris_test <= 250)
 
 		
 		good_new = p1#[st==1]
@@ -367,10 +367,10 @@ class Hoop_finder:
 			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0:
         			a,b = new.ravel()
         			c,d = old.ravel()
-        			mask = cv2.line(self.mask, (a,b),(c,d), (127,127+30000*self.deltas[0][i],100), 2)#127+100*angles2[0][i]
+        			#mask = cv2.line(self.mask, (a,b),(c,d), (127,127+30000*self.deltas[0][i],100), 2)#127+100*angles2[0][i]
 				#print positions[i][1]
-				frame = cv2.circle(frame_gray2,(a,b),5,(127,int(127+0*self.positions[i][0]),int(127+0*self.positions[i][1])),-1)#color constants 5,5
-        			#frame = cv2.circle(frame_gray2,(self.ctrx+int(12*self.positions[i][0]),self.imagey-int(12*self.positions[i][1])),5,(127,27,127),-1)#self.color[i].tolist()
+				frame = cv2.circle(frame_gray2,(a,b),5,(127,int(127+5000*self.deltas[0][i]),int(127+0*self.positions[i][1])),-1)#color constants 5,5
+        			frame = cv2.circle(frame_gray2,(self.ctrx+int(22*self.positions[i][0]),self.imagey-int(22*self.positions[i][1])),5,(27,127,127),-1)#self.color[i].tolist()
 
 				#if angles2[0][i] > 0 and p1[i][0][0] < self.ctrx:
 
@@ -383,7 +383,7 @@ class Hoop_finder:
     		imgout = cv2.add(imgbgr, self.mask)
 
 		#updates the previous frame, points, and rolling average
-    		self.old_gray = frame_gray2.copy()
+    		self.old_gray = frame_gray.copy()
    		self.p0 = p1.copy()
 		#self.update_roll_avg([self.flow[0], self.flow[1], self.flow[2], 0)
 		
@@ -394,13 +394,13 @@ class Hoop_finder:
 		#cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
 		#cv2.circle(imgbgr, (int(-self.ctrx*flow[3]*4/3.141592), self.ctry), 30, (100,100,50), 10) #*4/3.14159265358979
 
-		cv2.circle(frame_gray, (int(self.ctrx-200*self.v[1]), int(self.ctry-200*self.v[0])), 30, (100,90,100), 10)
-		#nongray = cv2.cvtColor(frame_gray2, cv2.COLOR_GRAY2BGR)
+		cv2.circle(frame_gray2, (int(self.ctrx-200*self.v[1]), int(self.ctry-200*self.v[0])), 30, (100,90,100), 10)
+
 		imgdrone = self.bridge.cv2_to_imgmsg(frame_gray2, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
 
 		self.pub_image.publish(imgdrone)
 
-		imgdrone2 = self.bridge.cv2_to_imgmsg(hgray, "32FC1") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
+		imgdrone2 = self.bridge.cv2_to_imgmsg(imgout, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
 
 		self.pub_image2.publish(imgdrone2)
 
