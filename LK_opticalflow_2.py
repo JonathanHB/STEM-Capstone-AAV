@@ -85,6 +85,7 @@ class Hoop_finder:
 		if (self.initframe): #initializes points once when program starts
 
 			self.initflow(img)
+			self.linearfly()
 			
 			self.initframe = False
 
@@ -361,9 +362,9 @@ class Hoop_finder:
 
 			if self.m != 0:
 
-				print math.atan(1/self.m)
+				#print math.atan(1/self.m)
 				
-				twist.linear.x = .1; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = 1*math.atan(1/self.m); twist.angular.y = 0; twist.angular.z = 0
+				twist.linear.x = .1; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = -1*math.atan(1/self.m); twist.angular.y = 0; twist.angular.z = 0
 
 			else:
 
@@ -419,11 +420,12 @@ class Hoop_finder:
 		#print self.v
 
 		
-		
+
 		#cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
 		#cv2.circle(imgbgr, (int(-self.ctrx*flow[3]*4/3.141592), self.ctry), 30, (100,100,50), 10) #*4/3.14159265358979
 
 		cv2.circle(frame_gray2, (int(self.ctrx-200*self.v[1]), int(self.ctry-200*self.v[0])), 30, (100,90,100), 10)
+		cv2.circle(frame_gray2, (int(self.ctrx-2*math.atan(1/self.m)), int(self.ctry), 30, (100,190,100), 10)
 
 		imgdrone = self.bridge.cv2_to_imgmsg(frame_gray2, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
 

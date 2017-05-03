@@ -85,6 +85,7 @@ class Hoop_finder:
 		if (self.initframe): #initializes points once when program starts
 
 			self.initflow(img)
+			self.linearfly()
 			
 			self.initframe = False
 
@@ -359,11 +360,11 @@ class Hoop_finder:
 
 			twist = Twist()
 
-			if m != 0:
+			if self.m != 0:
 
 				print math.atan(1/self.m)
 				
-				twist.linear.x = .1; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = 1*math.atan(1/self.m); twist.angular.y = 0; twist.angular.z = 0
+				twist.linear.x = .1; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = -1*math.atan(1/self.m); twist.angular.y = 0; twist.angular.z = 0
 
 			else:
 
