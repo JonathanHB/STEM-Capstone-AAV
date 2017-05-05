@@ -219,11 +219,20 @@ class Hoop_finder:
 				if deltas[0][i] != 0 and velocity[1] != 0 and velocity[0] != 0:
 
 					distance = abs((velocity[1]-np.tan(angles[0][i])*velocity[0])*np.cos(angles[0][i])/deltas[0][i])
+					
+					if distance > 1.5 and distance < 80:
 
-					locations[0][i] = distance*np.sin(angles[0][i])  #lateral location
-					locations[1][i] = distance*np.cos(angles[0][i])  #axial location
-					radii[i] = distance
+						locations[0][i] = distance*np.sin(angles[0][i])  #lateral location
+						locations[1][i] = distance*np.cos(angles[0][i])  #axial location
+						radii[i] = distance
+					else:
+
+						locations[0][i] = 0
+						locations[1][i] = 0
+						radii[i] = 0
+
 					#print locations[0][i], locations[1][i]
+				
 				else:
 
 					locations[0][i] = 0
@@ -364,7 +373,7 @@ class Hoop_finder:
 
 				#print math.atan(1/self.m)
 				
-				twist.linear.x = .1; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = -1*math.atan(1/self.m); twist.angular.y = 0; twist.angular.z = 0
+				twist.linear.x = .1; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = -5*math.atan(1/self.m); twist.angular.y = 0; twist.angular.z = 0
 
 			else:
 
@@ -404,7 +413,7 @@ class Hoop_finder:
 					frame = cv2.line(frame_gray2, (self.ctrx, self.imagey), (self.ctrx+np.sign(int(self.m))*200,self.imagey-abs(int(self.m))*200), (27,27,227))
 
 				frame = cv2.circle(frame_gray2,(a,b),5,(127,int(127+5000*self.deltas[0][i]),int(127+0*self.positions[1][i])),-1)#color constants 5,5
-        			frame = cv2.circle(frame_gray2,(self.ctrx+int(2*self.positions[0][i]),self.imagey-int(2*self.positions[1][i])),5,(27,127,127),-1)#self.color[i].tolist()
+        			frame = cv2.circle(frame_gray2,(self.ctrx+int(5*self.positions[0][i]),self.imagey-int(5*self.positions[1][i])),5,(27,127,127),-1)#self.color[i].tolist()
 
 		self.trail_refresh+=1
 
@@ -425,7 +434,10 @@ class Hoop_finder:
 		#cv2.circle(imgbgr, (int(-self.ctrx*flow[3]*4/3.141592), self.ctry), 30, (100,100,50), 10) #*4/3.14159265358979
 
 		cv2.circle(frame_gray2, (int(self.ctrx-200*self.v[1]), int(self.ctry-200*self.v[0])), 30, (100,90,100), 10)
-		cv2.circle(frame_gray2, (int(self.ctrx-2*math.atan(1/self.m)), int(self.ctry), 30, (100,190,100), 10)
+		
+		if self.m != 0:
+			#print math.atan(1/self.m)
+			cv2.circle(frame_gray2, (int(self.ctrx-2*math.atan(1/self.m)), int(self.ctry)), 30, (100,190,100), 10)
 
 		imgdrone = self.bridge.cv2_to_imgmsg(frame_gray2, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
 
