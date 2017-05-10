@@ -20,38 +20,42 @@ class Hoop_finder:
 
 		self.sub_image = rospy.Subscriber("/ardrone/front/image_raw", Image, self.takeimage, queue_size=1) #gets front camera raw image
 		self.sub_image = rospy.Subscriber("/ardrone/odometry", Odometry, self.odometry, queue_size=1) #gets odometry data
-		self.pub_image = rospy.Publisher("~detection_image", Image, queue_size=1) #publishes the drone camera image, with feature points and visual debugging images superimposed
-		self.pub_image2 = rospy.Publisher("~detection_image2", Image, queue_size=1) #used to debug image processing
+		
+		self.pub_image = rospy.Publisher("~detection_image", Image, queue_size=1) 
+		self.pub_image2 = rospy.Publisher("~detection_image2", Image, queue_size=1)
+		#publish the drone camera image, with feature points and visual debugging images superimposed
 
-		self.pub_land = rospy.Publisher('/ardrone/land',Empty,queue_size=1)	
-		self.pub_takeoff = rospy.Publisher('/ardrone/takeoff',Empty,queue_size=1)	
+		self.pub_land = rospy.Publisher('/ardrone/land',Empty,queue_size=1) #lands drone
+		self.pub_takeoff = rospy.Publisher('/ardrone/takeoff',Empty,queue_size=1) #makes drone take off	
 		self.pub_twist = rospy.Publisher('cmd_vel', Twist, queue_size = 1) #publishes commands to drone
 
-		self.bridge = CvBridge()
+		self.bridge = CvBridge() #used to convert between opencv's and the drone's image formats
 
 		self.imagex = 640
-		self.imagey = 360 #dimensions of the image, in pixels
+		self.imagey = 360 
+		#dimensions of the image, in pixels
 
 		self.ctrx = int(self.imagex/2.0)
-		self.ctry = int(self.imagey/2.0) #coordinates of image center, in pixels
+		self.ctry = int(self.imagey/2.0) 
+		#coordinates of image center, in pixels
 
-		self.old_gray = np.zeros((self.imagex, self.imagey), dtype = "uint8") #grayscale version of previous image used to compute flow !!
-		self.mask = np.zeros((self.imagex, self.imagey, 3), dtype = "uint8") #stores point trails !!
+		self.old_gray = np.zeros((self.imagex, self.imagey), dtype = "uint8") #grayscale version of previous image used to compute flow
+		self.mask = np.zeros((self.imagex, self.imagey, 3), dtype = "uint8") #stores point trails
 
-		self.maxcorners = 400 #maximum number of points used
+		self.maxcorners = 400 #maximum number of feature points used
 
 		self.p0 = np.zeros((self.maxcorners,1,2), dtype = "float32") #previous point set used to compute flow
 
-		self.lastangles = [] #used to compute d-theta
-
-		self.rollavglength = 10 #the number of values to use for the rolling average; long arrays are less sensitive and lag more, but resist noise better
+		self.rollavglength = 10 
 		self.rralen = 50
-		self.rollingavgdata = np.zeros((3,100), dtype = "float32") #stores the last [rollingavglength] flow values to compute mean
+		#the numbers of values to use for rolling averages; long arrays are less sensitive and lag more, but resist noise better
+		self.rollingavgdata = np.zeros((3,100), dtype = "float32") 
 		self.rra = np.zeros((self.rralen), dtype = "float32")
-		self.v = np.zeros((2), dtype = "float32") #horizontal velocity from bottom camera
+		#store data values over time to compute rolling averages
 
-		#initializes the tracking array for regenerated points
-		self.movedpts = np.zeros((self.maxcorners,2), dtype = "uint8")
+		self.v = np.zeros((2), dtype = "float32") #horizontal velocity from bottom camera odometry
+
+		self.movedpts = np.zeros((self.maxcorners,2), dtype = "uint8") #initializes the tracking array for regenerated points
 
 		# Create some random colors for each trail
 		self.color = np.random.randint(0,255,(self.maxcorners,3))
@@ -60,24 +64,24 @@ class Hoop_finder:
 		# params for ShiTomasi corner detection
 		self.feature_params = dict(maxCorners = self.maxcorners,qualityLevel = 0.2,minDistance = 7,blockSize = 7)
 		#a quality level of .3 seemed worse
-		self.initframe = True #used to initialize point set once on the first camera frame	
-		self.delta_init = True
 
-		self.trail_refresh = 0
+		self.initframe = True #used to initialize point set once on the first camera frame	
+
+		self.trail_refresh = 0 #a counter used to periodically clear trails
 
 		self.flow = [] #the flow data computed by getvector
 
-		self.fast = cv2.FastFeatureDetector()
+		self.fast = cv2.FastFeatureDetector() #an alternative to Shi-Tomasi corner detection
 
-		self.n = 0
+		self.n = 0 #a counter used to control the frequency of point triangulation so that their actual movement overwhelms the noise
 
-		self.angles_old = np.zeros((2,self.maxcorners), dtype = "float32")
+		self.angles_old = np.zeros((2,self.maxcorners), dtype = "float32") #an angle buffer used to compute anglar velocity of feature points
 
-		self.deltas = []
-		self.positions = []
+		self.deltas = [] #feature point angular velocities
+		self.positions = [] #triangulated feature point positions
 
-		self.m = 0
-		self.b = 0
+		self.m = 0 #hall regression slope
+		self.b = 0 #hall regression y intercept
 
 
 	def takeimage(self, img): #[front camera image from subscriber] runs image processing, and feeds the resulting pose data into the navigation algorithm
@@ -101,13 +105,13 @@ class Hoop_finder:
 		#print self.v
 		
 
-	def linearfly(self):
+	def linearfly(self): #takes drone off and flies it in a line, used to get it moving so that it can reliably triangulate
 
-		time.sleep(1)
+		time.sleep(1) #needed for takeoff publisher to initialize
 		
 		self.pub_takeoff.publish(Empty())
 
-		time.sleep(2)
+		time.sleep(2) #lets drone get into the air
 
 		twist = Twist()
 		twist.linear.x = .1; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
@@ -115,7 +119,6 @@ class Hoop_finder:
 		print "cmdsent"
 		time.sleep(1) #builds up a steady forward speed for accurate triangulation
 
-		#self.pub_land.publish(Empty())
 		#print "done"
 
 
@@ -159,11 +162,17 @@ class Hoop_finder:
 
 	####################################################################################################################
 
-	def linreg(self, vals): 
+	def linreg(self, vals): #[points locations] performs linear regression of feature points for which positions could be triangulated to figure out the drone's angle in the hall
 
-		if vals[0][0] != 0: #eliminates empty array issues when the drone is landed and no odometry is available
+		xvals = vals[0]
+		yvals = vals[1]
 
-			m,b = np.polyfit(vals[0], vals[1], 1)
+		xnonzero = xvals[xvals!= 0]
+		ynonzero = yvals[yvals!= 0]
+
+		if len(xnonzero) != 0: #eliminates empty array issues when the drone is landed and no odometry is available
+
+			m,b = np.polyfit(xnonzero, ynonzero, 1)
 
 		else:
 
@@ -172,7 +181,7 @@ class Hoop_finder:
 		return m,b
 
 
-	def getangles(self, points): #[points] returns an array with the x and y angles of all the points
+	def getangles(self, points): #[feature points] returns an array with the x and y angles of all the points
 
 		z = 409.581 #camera dependent constant, with dimensions of pixels
 
@@ -206,7 +215,7 @@ class Hoop_finder:
 		return d_angles
 
 
-	def getlocations(self, angles, deltas, velocity):
+	def getlocations(self, angles, deltas, velocity): #combines feature point position and motion with ground odometry to triangulate the points
 
 		locations = np.zeros((2,self.maxcorners), dtype = "float32")
 
@@ -220,7 +229,7 @@ class Hoop_finder:
 
 					distance = abs((velocity[1]-np.tan(angles[0][i])*velocity[0])*np.cos(angles[0][i])/deltas[0][i])
 					
-					if distance > 1.5 and distance < 80:
+					if distance < 64:
 
 						locations[0][i] = distance*np.sin(angles[0][i])  #lateral location
 						locations[1][i] = distance*np.cos(angles[0][i])  #axial location
@@ -356,6 +365,8 @@ class Hoop_finder:
 
 		interval = 10.0
 
+		print "g"
+
 		if round(self.n/interval) == self.n/interval:
 
 			angles2 = self.getangles(p1)
@@ -371,11 +382,13 @@ class Hoop_finder:
 
 			if self.m != 0:
 
-				#print math.atan(1/self.m)
+				print math.atan(1/self.m)
 				
 				twist.linear.x = .1; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = -5*math.atan(1/self.m); twist.angular.y = 0; twist.angular.z = 0
 
 			else:
+
+				print "wot 'n disorientation"
 
 				twist.linear.x = .1; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
 
@@ -409,10 +422,9 @@ class Hoop_finder:
 				#print positions[i][1]
 
 
-				if self.m != 0:
-					frame = cv2.line(frame_gray2, (self.ctrx, self.imagey), (self.ctrx+np.sign(int(self.m))*200,self.imagey-abs(int(self.m))*200), (27,27,227))
+				
 
-				frame = cv2.circle(frame_gray2,(a,b),5,(127,int(127+5000*self.deltas[0][i]),int(127+0*self.positions[1][i])),-1)#color constants 5,5
+			#!	frame = cv2.circle(frame_gray2,(a,b),5,(127,int(127+5000*self.deltas[0][i]),int(127+0*self.positions[1][i])),-1)#color constants 5,5
         			frame = cv2.circle(frame_gray2,(self.ctrx+int(5*self.positions[0][i]),self.imagey-int(5*self.positions[1][i])),5,(27,127,127),-1)#self.color[i].tolist()
 
 		self.trail_refresh+=1
@@ -433,11 +445,16 @@ class Hoop_finder:
 		#cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
 		#cv2.circle(imgbgr, (int(-self.ctrx*flow[3]*4/3.141592), self.ctry), 30, (100,100,50), 10) #*4/3.14159265358979
 
-		cv2.circle(frame_gray2, (int(self.ctrx-200*self.v[1]), int(self.ctry-200*self.v[0])), 30, (100,90,100), 10)
+	#!	cv2.circle(frame_gray2, (int(self.ctrx-200*self.v[1]), int(self.ctry-200*self.v[0])), 30, (100,90,100), 10)
+
+		cv2.circle(frame_gray2, (int(self.ctrx), int(self.imagey)), 7, (0,0,0), 2)
 		
 		if self.m != 0:
 			#print math.atan(1/self.m)
-			cv2.circle(frame_gray2, (int(self.ctrx-2*math.atan(1/self.m)), int(self.ctry)), 30, (100,190,100), 10)
+
+			cv2.line(frame_gray2, (self.ctrx, self.imagey-int(self.b)*5), (self.ctrx+np.sign(int(self.m))*200, self.imagey-abs(int(self.m*200))-int(self.b)*5), (27,27,227))
+
+		#!	cv2.circle(frame_gray2, (int(self.ctrx-2*math.atan(1/self.m)), int(self.ctry)), 30, (100,190,100), 10)
 
 		imgdrone = self.bridge.cv2_to_imgmsg(frame_gray2, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
 
