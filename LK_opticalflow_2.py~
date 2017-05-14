@@ -300,6 +300,7 @@ class Hoop_finder:
 			newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #generates a batch of as many points as need regeneration
 
 			#newpts = self.fast.detect(gray,None)
+			#newpts = self.sift.detect(gray,None)
 
 			
 			
@@ -410,8 +411,8 @@ class Hoop_finder:
 			self.mask = np.zeros_like(imgbgr)
 			self.trail_refresh = 0
 
-		frame_gray2 = np.zeros_like(imgbgr) #provides a black background
-		#frame_gray2 = cv2.cvtColor(frame_gray, cv2.COLOR_GRAY2BGR)
+		#frame_gray2 = np.zeros_like(imgbgr) #provides a black background
+		frame_gray2 = cv2.cvtColor(frame_gray, cv2.COLOR_GRAY2BGR)
 
 		#draws the tracks to show point motion
     		for i,(new,old) in enumerate(zip(good_new,good_old)):
