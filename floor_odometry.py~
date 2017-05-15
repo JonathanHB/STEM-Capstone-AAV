@@ -23,6 +23,8 @@ class Hoop_finder:
 		self.pub_image = rospy.Publisher("~detection_image", Image, queue_size=1) #publishes the drone camera image, with feature points and visual debugging images superimposed
 		self.pub_image2 = rospy.Publisher("~detection_image2", Image, queue_size=1) #used to debug image processing
 		self.pub_twist = rospy.Publisher('cmd_vel', Twist, queue_size = 1) #publishes commands to drone
+		self.pub_takeoff = rospy.Publisher('/ardrone/takeoff',Empty,queue_size=1) #makes drone take off	
+
 		self.bridge = CvBridge()
 
 		self.imagex = 640
@@ -45,7 +47,9 @@ class Hoop_finder:
 
 		self.n = 0
 
-		self.image = []
+		#self.image = []
+
+		self.linearfly()
 
 
 	def takeimage(self, img): #[front camera image from subscriber] runs image processing, and feeds the resulting pose data into the navigation algorithm
@@ -80,10 +84,10 @@ class Hoop_finder:
 
 		self.v = [data.twist.twist.linear.x, data.twist.twist.linear.y, data.twist.twist.angular.x]
 	
-		if (self.initframe): #initializes points once when program starts
+		#if (self.initframe): #initializes points once when program starts
 
-			self.linearfly
-			self.initframe = False
+		#	self.linearfly()
+		#	self.initframe = False
 	
 		self.processimage2(self.image, self.v)
 
@@ -92,7 +96,7 @@ class Hoop_finder:
 
 		imgbgr = self.bridge.imgmsg_to_cv2(imgdrone, "bgr8") #converts from drone image to bgr8 for opencv
 
-		cv2.circle(imgbgr, (int(self.ctrx+10*data[1]),int(self.ctry+10*data[0])), abs(int(data[2])), (127,127,200), 10)
+		cv2.circle(imgbgr, (int(self.ctrx+100*data[1]),int(self.ctry+100*data[0])), abs(int(data[2])), (127,127,200), 10)
 
 		#cv2.circle(imgbgr, (int(self.ctrx+-.5*v[1]),self.ctry), 20, color, 10)
 

@@ -23,6 +23,7 @@ class Hoop_finder:
 		self.pub_image = rospy.Publisher("~detection_image", Image, queue_size=1) #publishes the drone camera image, with feature points and visual debugging images superimposed
 		self.pub_image2 = rospy.Publisher("~detection_image2", Image, queue_size=1) #used to debug image processing
 		self.pub_twist = rospy.Publisher('cmd_vel', Twist, queue_size = 1) #publishes commands to drone
+		self.pub_takeoff = rospy.Publisher('/ardrone/takeoff',Empty,queue_size=1) #makes drone take off	
 		self.bridge = CvBridge()
 
 		self.imagex = 640
@@ -68,7 +69,7 @@ class Hoop_finder:
 		if (self.initframe): #initializes points once when program starts
 
 			self.initflow(img)
-			self.linearfly
+			self.linearfly()
 			self.initframe = False
 
 
@@ -234,7 +235,7 @@ class Hoop_finder:
 			print self.flow[2]
 
 			twist = Twist()
-			twist.linear.x = .1-.5*self.flow[2]; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
+			twist.linear.x = .1-.04*self.flow[2]; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
 			self.pub_twist.publish(twist) 
 		
 		self.n += 1
