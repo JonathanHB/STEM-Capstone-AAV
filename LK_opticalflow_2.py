@@ -109,13 +109,13 @@ class Hoop_finder:
 
 		time.sleep(1) #needed for takeoff publisher to initialize
 		
-		self.pub_takeoff.publish(Empty())
+		self.pub_takeoff.publish(Empty())#TODO reenable
 
 		time.sleep(2) #lets drone get into the air
 
 		twist = Twist()
 		twist.linear.x = .1; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
-		self.pub_twist.publish(twist) 
+		#self.pub_twist.publish(twist)
 		print "cmdsent"
 		time.sleep(1) #builds up a steady forward speed for accurate triangulation
 
@@ -388,11 +388,12 @@ class Hoop_finder:
 
 			else:
 
-				print "no data"
+				#print "no data"
 
 				twist.linear.x = .1; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
 
-			self.pub_twist.publish(twist) 
+
+			#self.pub_twist.publish(twist) 
 
 		self.n+=1		
 

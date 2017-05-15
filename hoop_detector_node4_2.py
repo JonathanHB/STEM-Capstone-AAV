@@ -33,6 +33,14 @@ class Hoop_finder:
 		self.params = [[0,.2],[1.9,.05],[0,.04]] #the objective and maximum values
 		self.Ebuffer = [0,0,0] #used for derivative computation, can be declared inside of hoopnav as long as second derivatives aren't being computed
 		
+		self.imagex = 640
+		self.imagey = 360 
+		#dimensions of the image, in pixels
+
+		self.ctrx = int(self.imagex/2.0)
+		self.ctry = int(self.imagey/2.0) 
+		#coordinates of image center, in pixels
+
 		#self.revcount = 0 #used to recheck direction intermittently
 		self.direction = -1 #the drone's guess as to the right direction to be going
 		self.vy = 0 #odometry y velocity
@@ -248,6 +256,9 @@ class Hoop_finder:
 
 				cv2.ellipse(imgcont,ellipse,(255,0,0),2) #draws ellipse
 			
+				cv2.circle(imgcont, (self.ctrx+self.vy, self.ctry), 10, (127,127,0) 5)
+				cv2.circle(imgcont, (self.ctrx+20*self.direction, self.ctry), 10, (127,0,127), 5)
+
 				#the hoop is ~40" in diameter, reads h= 512 at x = 36 inches .5071 = atan((40/2)/36), .5 = radius of hoop in meters
 
 				#hoop_angle = math.acos(ellipse[1][0]/ellipse[1][1]) #computes and hoop angle
@@ -263,6 +274,7 @@ class Hoop_finder:
 				#print "--------------------"
 				imgdrone2 = self.bridge.cv2_to_imgmsg(imgcont, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to
 				self.pub_image.publish(imgdrone2)
+				print "published"
 
 				return [drone_angle, hoop_distance, hoop_angle2]
 			
