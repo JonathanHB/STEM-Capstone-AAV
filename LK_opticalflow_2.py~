@@ -300,6 +300,7 @@ class Hoop_finder:
 			newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #generates a batch of as many points as need regeneration
 
 			#newpts = self.fast.detect(gray,None)
+			#newpts = self.sift.detect(gray,None)
 
 			
 			

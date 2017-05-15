@@ -300,6 +300,7 @@ class Hoop_finder:
 			newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #generates a batch of as many points as need regeneration
 
 			#newpts = self.fast.detect(gray,None)
+			#newpts = self.sift.detect(gray,None)
 
 			
 			
@@ -365,7 +366,6 @@ class Hoop_finder:
 
 		interval = 10.0
 
-		print "g"
 
 		if round(self.n/interval) == self.n/interval:
 
