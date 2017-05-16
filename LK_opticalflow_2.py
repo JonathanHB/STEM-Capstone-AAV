@@ -101,7 +101,7 @@ class Hoop_finder:
 		#stores odometry data to integrate with vision processing
 		#print data
 		#print data.twist.twist.linear.y
-		self.v = [data.twist.twist.linear.x, data.twist.twist.linear.y]
+		self.v = [data.twist.twist.linear.x, data.twist.twist.linear.y, data.pose.pose.position.x, data.pose.pose.position.y]
 		#print self.v
 		
 
@@ -408,7 +408,7 @@ class Hoop_finder:
 		good_old = self.p0#[st==1]
 		
 		if self.trail_refresh == 100:
-			self.mask = np.zeros_like(imgbgr)
+			#self.mask = np.zeros_like(imgbgr) #TODO reenable when needed
 			self.trail_refresh = 0
 
 		#frame_gray2 = np.zeros_like(imgbgr) #provides a black background
@@ -422,7 +422,7 @@ class Hoop_finder:
         			#mask = cv2.line(self.mask, (a,b),(c,d), (127,127+30000*self.deltas[0][i],100), 2)#127+100*angles2[0][i]
 				#print positions[i][1]
 
-
+				
 				
 
 				frame = cv2.circle(frame_gray2,(a,b),5,(127,int(127+5000*self.deltas[0][i]),int(127+0*self.positions[1][i])),-1)#color constants 5,5
@@ -430,7 +430,7 @@ class Hoop_finder:
 
 		self.trail_refresh+=1
 
-
+		mask = cv2.circle(self.mask, (int(20*self.v[3]+self.ctrx), int(20*self.v[2]+self.ctry)), 1, (0,127,0), 2)
 
     		imgout = cv2.add(imgbgr, self.mask)
 

@@ -63,6 +63,8 @@ class Hoop_finder:
 
 		self.n = 0
 
+		self.lastradial = 0
+
 
 	def takeimage(self, img): #[front camera image from subscriber] runs image processing, and feeds the resulting pose data into the navigation algorithm
 
@@ -122,7 +124,7 @@ class Hoop_finder:
 			
 			if self.movedpts[i][0] == 0 and self.movedpts[i][1] == 0: #omits regenerated points for which flow would be computed between old and new positions
 
-				x = points2[i][0][0]-points1[i][0][0] #-self.v[2]*pixperrad
+				x = points2[i][0][0]-points1[i][0][0]
 				y = points2[i][0][1]-points1[i][0][1]
 
 				totalx+=x
@@ -131,7 +133,7 @@ class Hoop_finder:
 				px = points2[i][0][0]-self.ctrx-dctrx*pixperrad
 				py = points2[i][0][1]-self.ctry
 
-				rads[i] = (x*px + y*py)/np.sqrt(px*px + py*py) #the raw dot product is weighted in favor of points near the edges; this is the most computationally efficient way to do it as far as I know, but idk if it is desirable, I should do some geometry to try to figure out what if any weighting is optimal
+				rads[i] = (x*px + y*py)/(px*px + py*py+1) #np.sqrt() #this dot product should be fairly evenly weighted 
 				totalrad += rads[i]
 
 		self.flow = [totalx/len(points1), totaly/len(points1), totalrad/len(points1)] #returns average flow values
@@ -234,9 +236,17 @@ class Hoop_finder:
 
 			print self.flow[2]
 
+			radial = self.flow[2]/(abs(self.v[0])+1)
+
+			deriv = radial-self.lastradial
+			kp = -.8 #-.04
+			kd = .01
+
 			twist = Twist()
-			twist.linear.x = .1-.04*self.flow[2]; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
+			twist.linear.x = .1+kp*radial+kd*deriv; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
 			self.pub_twist.publish(twist) 
+
+			self.lastradial = radial
 		
 		self.n += 1
 
@@ -288,7 +298,7 @@ class Hoop_finder:
 			#print "reverse"
 
 
-		cv2.circle(imgbgr, ctr, abs(int(100*flow[2])), color, 10)
+		cv2.circle(imgbgr, ctr, abs(int(3000*flow[2])), color, 10)
 
 		cv2.circle(imgbgr, (int(self.ctrx-self.a),self.ctry), 20, color, 10)
 

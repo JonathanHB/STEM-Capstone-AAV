@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 import math
+import tf
 
 class Hoop_finder:
 
@@ -56,8 +57,6 @@ class Hoop_finder:
 
 		self.image = img
 
-
-
 	
 
 	def linearfly(self): #takes drone off and flies it in a line, used to get it moving so that it can reliably triangulate
@@ -82,8 +81,16 @@ class Hoop_finder:
 		print data
 		#print data.twist.twist.linear.y
 
-		self.v = [data.twist.twist.linear.x, data.twist.twist.linear.y, data.twist.twist.angular.x] #angular is always 0 regardless of whether drone is flying
+		quaternion = data.pose.pose.orientation
+		q2 = (quaternion.x, quaternion.y, quaternion.z, quaternion.w)
+		euler = tf.transformations.euler_from_quaternion(q2)
+
+		#print euler
+
+		self.v = [data.twist.twist.linear.x, data.twist.twist.linear.y, data.pose.pose.position.x, data.pose.pose.position.y, euler] #angular is always 0 regardless of whether drone is flying
 	
+
+
 		#if (self.initframe): #initializes points once when program starts
 
 		#	self.linearfly()
@@ -92,19 +99,28 @@ class Hoop_finder:
 		self.processimage2(self.image, self.v)
 
 
-	def processimage2(self, imgdrone, data): #performs optical flow and point set maintainence tasks
+	def processimage2(self, imgdrone, data):
 
 		imgbgr = self.bridge.imgmsg_to_cv2(imgdrone, "bgr8") #converts from drone image to bgr8 for opencv
+
+		if self.initframe:
+
+			self.mask = np.zeros_like(imgbgr)
+			self.initframe = False
 
 		cv2.circle(imgbgr, (int(self.ctrx+100*data[1]),int(self.ctry+100*data[0])), abs(int(data[2])), (127,127,200), 10)
 
 		#cv2.circle(imgbgr, (int(self.ctrx+-.5*v[1]),self.ctry), 20, color, 10)
 
-		twist = Twist()
-		twist.linear.x = .1; twist.linear.y = -0.5*data[1]; twist.linear.z = 0; twist.angular.x = -data[2]; twist.angular.y = 0; twist.angular.z = 0
-		self.pub_twist.publish(twist) 
+		cv2.circle(self.mask, (int(20*self.v[3]+self.ctrx), int(20*self.v[2]+self.ctry)), 1, (0,127,0), 2)
+		imgbgr = cv2.add(imgbgr, self.mask)
 
-		#print p1[5][0][1] #the zero in the middle is required because the array is nominally 3 dimensional but one dimension has 0 thickness
+
+		kp = -1
+
+		twist = Twist()
+		twist.linear.x = kp*self.v[2]*np.cos(self.v[4][0]); twist.linear.y = kp*self.v[3]*np.sin(self.v[4][0]); twist.linear.z = 0; twist.angular.x; twist.angular.y = 0; twist.angular.z = 0
+		self.pub_twist.publish(twist) 
 
 		imgdrone = self.bridge.cv2_to_imgmsg(imgbgr, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
 
