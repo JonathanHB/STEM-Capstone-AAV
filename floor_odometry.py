@@ -93,7 +93,7 @@ class Hoop_finder:
 
 		self.v = [data.twist.twist.linear.x, data.twist.twist.linear.y, data.pose.pose.position.x, data.pose.pose.position.y, euler] #angular is always 0 regardless of whether drone is flying
 	
-		print self.v[2], self.v[3]
+		#print self.v[2], self.v[3]
 
 		if (self.initframe2): #initializes points once when program starts
 
@@ -127,9 +127,9 @@ class Hoop_finder:
 
 
 
-
+		print self.v[4][0]
 		twist = Twist()
-		twist.linear.x = kp*(self.v[2]-self.x0)*np.cos(self.v[4][0]); twist.linear.y = kp*(self.v[3]-self.y0)*np.sin(self.v[4][0]); twist.linear.z = 0; twist.angular.x; twist.angular.y = 0; twist.angular.z = 0 #currently does both axial and lateral stabilization, doesn't move
+		twist.linear.x = kp*(self.v[3]-self.y0)*np.sin(self.v[4][0])+.05*np.cos(self.v[4][0]); twist.linear.y = kp*(self.v[3]-self.y0)*np.cos(self.v[4][0])+.05*np.sin(self.v[4][0]); twist.linear.z = 0; twist.angular.x; twist.angular.y = 0; twist.angular.z = 0 #currently does both axial and lateral stabilization, doesn't move
 		self.pub_twist.publish(twist) 
 
 		imgdrone = self.bridge.cv2_to_imgmsg(imgbgr, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form

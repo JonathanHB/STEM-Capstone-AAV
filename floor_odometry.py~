@@ -121,15 +121,15 @@ class Hoop_finder:
 
 		#cv2.circle(imgbgr, (int(self.ctrx+-.5*v[1]),self.ctry), 20, color, 10)
 
-		cv2.circle(self.mask, (int(20*(self.v[3]-self.y0)+self.ctrx), int(20*self.v[2]-self.x0)+self.ctry)), 1, (0,127,0), 2)
+		cv2.circle(self.mask, (int(20*(self.v[3]-self.y0)+self.ctrx), int(20*(self.v[2]-self.x0)+self.ctry)), 1, (0,127,0), 2)
 		#cv2.circle(self.mask, (int(20*kp*self.v[3]*np.cos(self.v[4][0])+self.ctrx), int(20*kp*self.v[2]*np.sin(self.v[4][0])+self.ctry)), 1, (0,0,127), 2)
 		imgbgr = cv2.add(imgbgr, self.mask)
 
 
 
-
+		#
 		twist = Twist()
-		twist.linear.x = kp*(self.v[2]-self.x0)*np.cos(self.v[4][0]); twist.linear.y = kp*(self.v[3]-self.y0)*np.sin(self.v[4][0]); twist.linear.z = 0; twist.angular.x; twist.angular.y = 0; twist.angular.z = 0 #currently does both axial and lateral stabilization, doesn't move
+		twist.linear.x = kp*(self.v[3]-self.y0)*np.sin(self.v[4][0])+.05*np.cos(self.v[4][0]); twist.linear.y = kp*(self.v[3]-self.y0)*np.cos(self.v[4][0])+.05*np.sin(self.v[4][0]); twist.linear.z = 0; twist.angular.x; twist.angular.y = 0; twist.angular.z = 0 #currently does both axial and lateral stabilization, doesn't move
 		self.pub_twist.publish(twist) 
 
 		imgdrone = self.bridge.cv2_to_imgmsg(imgbgr, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form

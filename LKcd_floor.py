@@ -24,7 +24,6 @@ class Hoop_finder:
 		self.pub_image2 = rospy.Publisher("~detection_image2", Image, queue_size=1) #used to debug image processing
 		self.pub_twist = rospy.Publisher('cmd_vel', Twist, queue_size = 1) #publishes commands to drone
 		self.pub_takeoff = rospy.Publisher('/ardrone/takeoff',Empty,queue_size=1) #makes drone take off	
-		self.pub_land = rospy.Publisher('/ardrone/land',Empty,queue_size=1) #makes drone land	
 		self.bridge = CvBridge()
 
 		self.imagex = 640
@@ -65,8 +64,6 @@ class Hoop_finder:
 		self.n = 0
 
 		self.lastradial = 0
-
-		self.lands = 0
 
 
 	def takeimage(self, img): #[front camera image from subscriber] runs image processing, and feeds the resulting pose data into the navigation algorithm
@@ -237,21 +234,13 @@ class Hoop_finder:
 
 			points = self.regenall(p1, frame_gray)
 
-			#print self.flow[2]
+			print self.flow[2]
 
 			radial = self.flow[2]/(abs(self.v[0])+1)
 
 			deriv = radial-self.lastradial
 			kp = -6 #-.04
 			kd = .01
-
-			if .05+kp*radial+kd*deriv < 0:
-				self.lands += 1
-				print "negative"
-
-				if self.lands > 1:
-					self.pub_land.publish(Empty())
-				
 
 			twist = Twist()
 			twist.linear.x = .05+kp*radial+kd*deriv; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
