@@ -116,9 +116,8 @@ class Hoop_finder:
 			self.x0 = data.pose.pose.position.x
 			self.y0 = data.pose.pose.position.y
 
-			#print self.x0, self.y0
+			print self.x0, self.y0
 			self.initframe2 = False
-
 		print data
 		quaternion = data.pose.pose.orientation
 		q2 = (quaternion.x, quaternion.y, quaternion.z, quaternion.w)

@@ -19,7 +19,7 @@ class Hoop_finder:
 	def __init__(self):
 
 		self.sub_image = rospy.Subscriber("/ardrone/front/image_raw", Image, self.takeimage, queue_size=1) #gets front camera raw image
-		self.sub_image = rospy.Subscriber("/ardrone/odometry", Odometry, self.odometry, queue_size=1) #gets odometry data
+		self.sub_odometry = rospy.Subscriber("/ardrone/odometry", Odometry, self.odometry, queue_size=1) #gets odometry data
 		
 		self.pub_image = rospy.Publisher("~detection_image", Image, queue_size=1) 
 		self.pub_image2 = rospy.Publisher("~detection_image2", Image, queue_size=1)
@@ -66,6 +66,7 @@ class Hoop_finder:
 		#a quality level of .3 seemed worse
 
 		self.initframe = True #used to initialize point set once on the first camera frame	
+		self.initframe2 = True #used to initialize point set once on the first camera frame	
 
 		self.trail_refresh = 0 #a counter used to periodically clear trails
 
@@ -82,6 +83,9 @@ class Hoop_finder:
 
 		self.m = 0 #hall regression slope
 		self.b = 0 #hall regression y intercept
+
+		self.x0 = 0
+		self.y0 = 0
 
 
 	def takeimage(self, img): #[front camera image from subscriber] runs image processing, and feeds the resulting pose data into the navigation algorithm
@@ -103,6 +107,14 @@ class Hoop_finder:
 		#print data.twist.twist.linear.y
 		self.v = [data.twist.twist.linear.x, data.twist.twist.linear.y, data.pose.pose.position.x, data.pose.pose.position.y]
 		#print self.v
+
+		if (self.initframe2): #initializes points once when program starts
+
+			self.x0 = self.v[2]
+			self.y0 = self.v[3]
+
+			#print self.x0, self.y0
+			self.initframe2 = False
 		
 
 	def linearfly(self): #takes drone off and flies it in a line, used to get it moving so that it can reliably triangulate
@@ -382,7 +394,7 @@ class Hoop_finder:
 
 			if self.m != 0:
 
-				print math.atan(1/self.m)
+				#print math.atan(1/self.m)
 				
 				twist.linear.x = .1; twist.linear.y = 0; twist.linear.z = 0; twist.angular.x = -5*math.atan(1/self.m); twist.angular.y = 0; twist.angular.z = 0
 
@@ -411,8 +423,8 @@ class Hoop_finder:
 			#self.mask = np.zeros_like(imgbgr) #TODO reenable when needed
 			self.trail_refresh = 0
 
-		#frame_gray2 = np.zeros_like(imgbgr) #provides a black background
-		frame_gray2 = cv2.cvtColor(frame_gray, cv2.COLOR_GRAY2BGR)
+		frame_gray2 = np.zeros_like(imgbgr) #provides a black background
+		#frame_gray2 = cv2.cvtColor(frame_gray, cv2.COLOR_GRAY2BGR)
 
 		#draws the tracks to show point motion
     		for i,(new,old) in enumerate(zip(good_new,good_old)):
@@ -426,7 +438,7 @@ class Hoop_finder:
 				
 
 				frame = cv2.circle(frame_gray2,(a,b),5,(127,int(127+5000*self.deltas[0][i]),int(127+0*self.positions[1][i])),-1)#color constants 5,5
-        			frame = cv2.circle(frame_gray2,(self.ctrx+int(5*self.positions[0][i]),self.imagey-int(5*self.positions[1][i])),5,(27,127,127),-1)#self.color[i].tolist()
+        			cv2.circle(self.mask,(self.ctrx+4*int(self.positions[0][i]+self.v[3]-self.y0),self.imagey-4*int(self.positions[1][i]+self.v[2]-self.x0)),2,(27,27,227),-1)#self.color[i].tolist()
 
 		self.trail_refresh+=1
 
