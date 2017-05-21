@@ -106,7 +106,7 @@ class Hoop_finder:
 			
 			time.sleep(3)
 
-			self.publand.publish(Empty)
+			#self.publand.publish(Empty)
 
 
 

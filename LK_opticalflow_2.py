@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 import math
+import tf
 
 class Hoop_finder:
 
@@ -80,12 +81,14 @@ class Hoop_finder:
 
 		self.deltas = [] #feature point angular velocities
 		self.positions = [] #triangulated feature point positions
+		self.realigned = []
 
 		self.m = 0 #hall regression slope
 		self.b = 0 #hall regression y intercept
 
 		self.x0 = 0
 		self.y0 = 0
+		self.t0 = 0
 
 
 	def takeimage(self, img): #[front camera image from subscriber] runs image processing, and feeds the resulting pose data into the navigation algorithm
@@ -105,15 +108,21 @@ class Hoop_finder:
 		#stores odometry data to integrate with vision processing
 		#print data
 		#print data.twist.twist.linear.y
-		self.v = [data.twist.twist.linear.x, data.twist.twist.linear.y, data.pose.pose.position.x, data.pose.pose.position.y]
+
+		quaternion = data.pose.pose.orientation
+		q2 = (quaternion.x, quaternion.y, quaternion.z, quaternion.w)
+		euler = tf.transformations.euler_from_quaternion(q2)
+		#print euler
+		self.v = [data.twist.twist.linear.x, data.twist.twist.linear.y, data.pose.pose.position.x, data.pose.pose.position.y, euler[0]]
 		#print self.v
 
 		if (self.initframe2): #initializes points once when program starts
 
 			self.x0 = self.v[2]
 			self.y0 = self.v[3]
+			self.t0 = self.v[4]
 
-			#print self.x0, self.y0
+			#print self.x0, self.y0, self.t0
 			self.initframe2 = False
 		
 
@@ -263,7 +272,18 @@ class Hoop_finder:
 		return locations, radii
 
 
-	
+	def rotate(self, angle, points):
+
+		output = np.zeros_like(points)
+
+		for i in range(0, len(points[0])):
+
+			output[0][i] = points[0][i]*np.cos(angle)+points[1][i]*np.sin(angle)
+			output[1][i] = points[1][i]*np.cos(angle)+points[0][i]*np.sin(angle)
+
+		return output
+
+
 	def regenbadpoints(self, points, quality): #[point locations, list of points with and without flow] flags and deflags points for which flow cannot be found
 
 		for x in range(0, len(points)): 
@@ -346,7 +366,7 @@ class Hoop_finder:
 					
 
 			
-		return points #returns updated point array
+		#return points #returns updated point array
 				
 		
 	def initflow(self, imgdrone1): #generates feature point array for LK optical flow
@@ -378,6 +398,10 @@ class Hoop_finder:
 
 		interval = 10.0
 
+		self.regenedgepoints(p1)
+
+		self.regenbadpoints(p1, st)
+
 
 		if round(self.n/interval) == self.n/interval:
 
@@ -388,7 +412,9 @@ class Hoop_finder:
 			self.positions, distances = self.getlocations(angles2, self.deltas, self.v)
 			self.m,self.b = self.linreg(self.positions)			
 
-			points = self.regenall(p1, frame_gray)
+			self.regenall(p1, frame_gray)
+
+			self.realigned = self.rotate(-self.v[4]+self.t0, self.positions)
 
 			twist = Twist()
 
@@ -409,9 +435,7 @@ class Hoop_finder:
 
 		self.n+=1		
 
-		self.regenedgepoints(p1)
-
-		self.regenbadpoints(p1, st)
+		
 
 		self.old_gray = frame_gray.copy()
 
@@ -423,8 +447,8 @@ class Hoop_finder:
 			#self.mask = np.zeros_like(imgbgr) #TODO reenable when needed
 			self.trail_refresh = 0
 
-		frame_gray2 = np.zeros_like(imgbgr) #provides a black background
-		#frame_gray2 = cv2.cvtColor(frame_gray, cv2.COLOR_GRAY2BGR)
+		#frame_gray2 = np.zeros_like(imgbgr) #provides a black background
+		frame_gray2 = cv2.cvtColor(frame_gray, cv2.COLOR_GRAY2BGR)
 
 		#draws the tracks to show point motion
     		for i,(new,old) in enumerate(zip(good_new,good_old)):
@@ -438,11 +462,16 @@ class Hoop_finder:
 				
 
 				frame = cv2.circle(frame_gray2,(a,b),5,(127,int(127+5000*self.deltas[0][i]),int(127+0*self.positions[1][i])),-1)#color constants 5,5
-        			cv2.circle(self.mask,(self.ctrx+4*int(self.positions[0][i]+self.v[3]-self.y0),self.imagey-4*int(self.positions[1][i]+self.v[2]-self.x0)),2,(27,27,227),-1)#self.color[i].tolist()
+        			cv2.circle(self.mask,(self.ctrx+int(5*(self.positions[0][i]+self.v[3]-self.y0)),self.imagey-int(5*(self.positions[1][i]+self.v[2]-self.x0))),1,(27,27,227),-1)#self.color[i].tolist()
 
 		self.trail_refresh+=1
 
-		mask = cv2.circle(self.mask, (int(20*self.v[3]+self.ctrx), int(20*self.v[2]+self.ctry)), 1, (0,127,0), 2)
+		cv2.circle(self.mask, (int(20*(self.v[3]-self.y0)+self.ctrx), int(20*(self.v[2]-self.x0)+self.imagey)), 1, (0,127,0), 2)
+
+		#cv2.circle(self.mask,(self.ctrx+int(100*np.sin(self.v[4])), self.ctry+int(100*np.cos(self.v[4]))), 2, (127,0,0), 2)  
+
+		cv2.line(self.mask, (self.ctrx, self.imagey), (self.ctrx+281, 0), (255,255,255))
+		cv2.line(self.mask, (self.ctrx, self.imagey), (self.ctrx-281, 0), (255,255,255))
 
     		imgout = cv2.add(imgbgr, self.mask)
 
@@ -458,16 +487,16 @@ class Hoop_finder:
 		#cv2.circle(imgbgr, ctr, abs(int(1000*flow[2])), color, 10)
 		#cv2.circle(imgbgr, (int(-self.ctrx*flow[3]*4/3.141592), self.ctry), 30, (100,100,50), 10) #*4/3.14159265358979
 
-	#!	cv2.circle(frame_gray2, (int(self.ctrx-200*self.v[1]), int(self.ctry-200*self.v[0])), 30, (100,90,100), 10)
+		#cv2.circle(frame_gray2, (int(self.ctrx-200*self.v[1]), int(self.ctry-200*self.v[0])), 30, (100,90,100), 10)
 
-		cv2.circle(frame_gray2, (int(self.ctrx), int(self.imagey)), 7, (0,0,0), 2)
+		#cv2.circle(frame_gray2, (int(self.ctrx), int(self.imagey)), 7, (0,0,0), 2)
 		
-		if self.m != 0:
+		#if self.m != 0:
 			#print math.atan(1/self.m)
 
 			#cv2.line(frame_gray2, (self.ctrx, self.imagey-int(self.b)*5), (self.ctrx+np.sign(int(self.m))*200, self.imagey-abs(int(self.m*200))-int(self.b)*5), (27,27,227))
 
-			cv2.circle(frame_gray2, (int(self.ctrx-2*math.atan(1/self.m)), int(self.ctry)), 30, (100,190,100), 10)
+			#cv2.circle(frame_gray2, (int(self.ctrx-4*math.atan(1/self.m)), int(self.ctry)), 10, (100,190,100), 5)
 
 		imgdrone = self.bridge.cv2_to_imgmsg(frame_gray2, "8UC3") #converts opencv's bgr8 back to the drone's raw_image for rviz use, converts both hsv and rgb to rviz-readable form
 

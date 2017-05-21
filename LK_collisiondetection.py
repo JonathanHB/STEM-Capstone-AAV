@@ -231,6 +231,10 @@ class Hoop_finder:
 
 		interval = 10.0
 
+		self.regenedgepoints(p1)
+
+		self.regenbadpoints(p1, st) 
+
 		if round(self.n/interval) == self.n/interval:
 
 			self.a, b, self.rvels = self.getvector(self.p0, p1)
@@ -261,9 +265,7 @@ class Hoop_finder:
 		
 		self.n += 1
 
-		self.regenedgepoints(p1)
 
-		self.regenbadpoints(p1, st) #this plus the block of 4 methods above contribute 1.5s of lag
 
 		
 		good_new = p1#[st==1]

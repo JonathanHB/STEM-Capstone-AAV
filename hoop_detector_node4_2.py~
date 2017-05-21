@@ -256,7 +256,8 @@ class Hoop_finder:
 
 				cv2.ellipse(imgcont,ellipse,(255,0,0),2) #draws ellipse
 			
-				cv2.circle(imgcont, (self.ctrx+self.vy, self.ctry), 10, 5)
+				cv2.circle(imgcont, (self.ctrx+self.vy, self.ctry), 10, (127,127,0) 5)
+				cv2.circle(imgcont, (self.ctrx+20*self.direction, self.ctry), 10, (127,0,127), 5)
 
 				#the hoop is ~40" in diameter, reads h= 512 at x = 36 inches .5071 = atan((40/2)/36), .5 = radius of hoop in meters
 

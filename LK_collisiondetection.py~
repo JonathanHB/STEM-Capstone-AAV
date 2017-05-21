@@ -70,7 +70,7 @@ class Hoop_finder:
 
 
 	def takeimage(self, img): #[front camera image from subscriber] runs image processing, and feeds the resulting pose data into the navigation algorithm
-		time.sleep(1) #needed for takeoff publisher to initialize
+
 		if (self.initframe): #initializes points once when program starts
 
 			self.initflow(img)

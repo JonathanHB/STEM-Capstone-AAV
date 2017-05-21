@@ -331,13 +331,6 @@ class Hoop_finder:
 
 			newpts = cv2.goodFeaturesToTrack(gray, mask = None, **fp3) #generates a batch of as many points as need regeneration
 
-			#newpts = self.fast.detect(gray,None)
-			#newpts = self.sift.detect(gray,None)
-
-			
-			
-			#print newpts[0].pt
-
 			c = 0
 
 			l = len(newpts) 	
@@ -345,28 +338,12 @@ class Hoop_finder:
 			for x in range(0, len(points)):
 
 				if self.movedpts[x][0] == 1 or self.movedpts[x][1] == 1:
-				
-					#for i in range(c,l):
 
-						#print gray[newpts[i].pt[1]][newpts[i].pt[0]]
-
-						#if gray[newpts[i].pt[1]][newpts[i].pt[0]] < 110:
-
-					points[x] = newpts[c]#.pt #replaces points flagged for regeneration
-						#	c+=1
-							
-						#	break #terminates once all new points have been used
-
-						#else: 
+					points[x] = newpts[c] #replaces points flagged for regeneration
 
 					c+=1
 					if c==l:
 						break #terminates once all new points have been used
-					
-					
-
-			
-		#return points #returns updated point array
 				
 		
 	def initflow(self, imgdrone1): #generates feature point array for LK optical flow
@@ -378,13 +355,7 @@ class Hoop_finder:
 		# Take first frame and find corners in it
 
 		self.p0 = cv2.goodFeaturesToTrack(self.old_gray, mask = None, **self.feature_params)
-		#kpts = self.fast.detect(self.old_gray,None)
 
-		#for i in range(0, self.maxcorners):
-
-		#	self.p0[i][0] = [kpts[i].pt[0], kpts[i].pt[1]]
-
-		# Create a mask image for drawing purposes
 		self.mask = np.zeros_like(imgbgr)
 
 
@@ -396,7 +367,7 @@ class Hoop_finder:
 		# calculates optical flow, p1 is an array of the feature points in their new positions
 		p1, st, err = cv2.calcOpticalFlowPyrLK(self.old_gray, frame_gray, self.p0, None, **self.lk_params)
 
-		interval = 10.0
+		interval = 1.0
 
 		self.regenedgepoints(p1)
 
@@ -462,7 +433,7 @@ class Hoop_finder:
 				
 
 				frame = cv2.circle(frame_gray2,(a,b),5,(127,int(127+5000*self.deltas[0][i]),int(127+0*self.positions[1][i])),-1)#color constants 5,5
-        			cv2.circle(self.mask,(self.ctrx+int(5*(self.realigned[0][i]+self.v[3]-self.y0)),self.imagey-int(5*(self.realigned[1][i]+self.v[2]-self.x0))),1,(27,27,227),-1)#self.color[i].tolist()
+        			cv2.circle(self.mask,(self.ctrx+int(5*(self.positions[0][i]+self.v[3]-self.y0)),self.imagey-int(5*(self.positions[1][i]+self.v[2]-self.x0))),1,(27,27,227),-1)#self.color[i].tolist()
 
 		self.trail_refresh+=1
 
