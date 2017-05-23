@@ -108,7 +108,7 @@ class Hoop_finder:
 
 	def processimage2(self, imgdrone, data):
 
-		kp = -.01
+		kp = -.03
 
 		imgbgr = self.bridge.imgmsg_to_cv2(imgdrone, "bgr8") #converts from drone image to bgr8 for opencv
 

@@ -246,14 +246,14 @@ class Hoop_finder:
 			radial = self.flow[2]/(abs(self.v[0])+1)
 
 			deriv = radial-self.lastradial
-			kp = -6 #-.04
-			kd = .01
+			kp = -6 #-6 #-.04
+			kd = .006 #.01
 
 			if .05+kp*radial+kd*deriv < 0:
 				self.lands += 1
 				print "negative"
 
-				if self.lands > 1:
+				if self.lands > 2:
 					self.pub_land.publish(Empty())
 				
 

@@ -108,7 +108,7 @@ class Hoop_finder:
 		#print data
 		#print data.twist.twist.linear.y
 
-		print "hi"
+
 
 
 		if self.initframe2: #initializes points once when program starts
@@ -119,7 +119,7 @@ class Hoop_finder:
 			#print self.x0, self.y0
 			self.initframe2 = False
 
-		print data
+
 		quaternion = data.pose.pose.orientation
 		q2 = (quaternion.x, quaternion.y, quaternion.z, quaternion.w)
 		euler = tf.transformations.euler_from_quaternion(q2)
@@ -264,23 +264,23 @@ class Hoop_finder:
 
 			deriv = radial-self.lastradial
 
-			kp = -6 #-.04
-			kd = .01
+			kp = -7 #-.04
+			kd = .005
 
-			kp2 = -.01
+			kp2 = -.03
 
 			if .05+kp*radial+kd*deriv < 0:
 				self.lands += 1
 				print "negative"
 
-				if self.lands > 1:
+				if self.lands > 2:
 					self.pub_land.publish(Empty())
 				
 
 			twist = Twist()
-			twist.linear.x = kp2*(self.v[3]-self.y0)*np.sin(self.v[4][0])+.05*np.cos(self.v[4][0])+kp*radial+kd*deriv; twist.linear.y = kp2*(self.v[3]-self.y0)*np.cos(self.v[4][0])+.05*np.sin(self.v[4][0]); twist.linear.z = 0; twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
+			twist.linear.x = .05*np.cos(self.v[4][0])+kp*radial+kd*deriv; twist.linear.y = kp2*(self.v[3]-self.y0)*np.cos(self.v[4][0]); twist.linear.z = 0; twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
 			self.pub_twist.publish(twist) 
-
+			#kp2*(self.v[3]-self.y0)*np.sin(self.v[4][0]), .05*np.sin(self.v[4][0])
 			self.lastradial = radial
 		
 		self.n += 1

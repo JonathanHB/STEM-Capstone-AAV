@@ -231,6 +231,10 @@ class Hoop_finder:
 
 		interval = 10.0
 
+		self.regenedgepoints(p1)
+
+		self.regenbadpoints(p1, st) 
+
 		if round(self.n/interval) == self.n/interval:
 
 			self.a, b, self.rvels = self.getvector(self.p0, p1)
@@ -242,14 +246,14 @@ class Hoop_finder:
 			radial = self.flow[2]/(abs(self.v[0])+1)
 
 			deriv = radial-self.lastradial
-			kp = -6 #-.04
-			kd = .01
+			kp = -6 #-6 #-.04
+			kd = .006 #.01
 
 			if .05+kp*radial+kd*deriv < 0:
 				self.lands += 1
 				print "negative"
 
-				if self.lands > 1:
+				if self.lands > 3:
 					self.pub_land.publish(Empty())
 				
 
@@ -261,9 +265,7 @@ class Hoop_finder:
 		
 		self.n += 1
 
-		self.regenedgepoints(p1)
 
-		self.regenbadpoints(p1, st) #this plus the block of 4 methods above contribute 1.5s of lag
 
 		
 		good_new = p1#[st==1]
